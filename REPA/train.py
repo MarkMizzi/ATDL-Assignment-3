@@ -171,6 +171,27 @@ def main(args):
         **block_kwargs
     )
 
+    if args.pretrained_path:
+        checkpoint = torch.load(
+            args.pretrained_path,
+            map_location='cpu',
+            weights_only=False,
+        )
+        if 'ema' in checkpoint:
+            state_dict = checkpoint['ema']
+        elif 'model' in checkpoint:
+            state_dict = checkpoint['model']
+        else:
+            state_dict = checkpoint
+        state_dict = dict(state_dict)
+        label_key = 'y_embedder.embedding_table.weight'
+        state_dict[label_key] = model.state_dict()[label_key].detach().clone()
+        model.load_state_dict(state_dict, strict=True)
+        logger.info(
+            f"Loaded pretrained weights from {args.pretrained_path}; "
+            "class embeddings initialized afresh."
+        )
+
     model = model.to(device)
     ema = deepcopy(model).to(device)  # Create an EMA of the model for use after training
     vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-mse").to(device)
@@ -395,6 +416,8 @@ def parse_args(input_args=None):
     parser.add_argument("--report-to", type=str, default="wandb")
     parser.add_argument("--sampling-steps", type=int, default=10000)
     parser.add_argument("--resume-step", type=int, default=0)
+    parser.add_argument("--pretrained-path", type=str, default=None,
+                        help="Trusted checkpoint for fine-tuning with fresh class embeddings and optimizer.")
 
     # model
     parser.add_argument("--model", type=str)
@@ -443,7 +466,10 @@ def parse_args(input_args=None):
         args = parser.parse_args(input_args)
     else:
         args = parser.parse_args()
-        
+
+    if args.pretrained_path and args.resume_step > 0:
+        parser.error("--pretrained-path and --resume-step cannot be combined")
+
     return args
 
 if __name__ == "__main__":
