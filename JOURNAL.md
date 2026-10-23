@@ -1,3 +1,7 @@
+# Journal
+
+## Dataset Preparation
+
 - 22/10 Mark. Downloaded the EuroSAT dataset with:
   ```python
   import kagglehub 
