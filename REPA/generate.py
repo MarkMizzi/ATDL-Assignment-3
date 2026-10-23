@@ -129,6 +129,7 @@ def main(args):
             num_steps=args.num_steps, 
             heun=args.heun,
             cfg_scale=args.cfg_scale,
+            num_classes=args.num_classes,
             guidance_low=args.guidance_low,
             guidance_high=args.guidance_high,
             path_type=args.path_type,

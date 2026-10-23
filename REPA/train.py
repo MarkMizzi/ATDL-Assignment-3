@@ -348,6 +348,7 @@ def main(args):
                         ys,
                         num_steps=50, 
                         cfg_scale=4.0,
+                        num_classes=args.num_classes,
                         guidance_low=0.,
                         guidance_high=1.,
                         path_type=args.path_type,

@@ -53,10 +53,11 @@ def euler_sampler(
         guidance_low=0.0,
         guidance_high=1.0,
         path_type="linear", # not used, just for compatability
+        num_classes=1000,
         ):
     # setup conditioning
     if cfg_scale > 1.0:
-        y_null = torch.tensor([1000] * y.size(0), device=y.device)
+        y_null = torch.full_like(y, num_classes)
     _dtype = latents.dtype    
     t_steps = torch.linspace(1, 0, num_steps+1, dtype=torch.float64)
     x_next = latents.to(torch.float64)
@@ -112,10 +113,11 @@ def euler_maruyama_sampler(
         guidance_low=0.0,
         guidance_high=1.0,
         path_type="linear",
+        num_classes=1000,
         ):
     # setup conditioning
     if cfg_scale > 1.0:
-        y_null = torch.tensor([1000] * y.size(0), device=y.device)
+        y_null = torch.full_like(y, num_classes)
             
     _dtype = latents.dtype
     
