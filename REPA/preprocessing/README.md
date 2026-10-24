@@ -21,6 +21,17 @@ python dataset_tools.py encode --source=[TARGET_PATH]/images \
 
 Here,`YOUR_DOWNLOAD_PATH` is the directory that you downloaded the dataset, and `TARGET_PATH` is the directory that you will save the preprocessed images and corresponding compressed latent vectors. This directory will be used for your experiment scripts. 
 
+#### EuroSAT train/validation/test split
+
+Split a preprocessed EuroSAT dataset containing paired `images/` and `vae-sd/` folders:
+
+```bash
+python preprocessing/split_eurosat.py --source=/path/to/eurosat --dest=/path/to/eurosat-splits --seed=0
+```
+
+This creates stratified 70/15/15 `train`, `val`, and `test` folders. Train with
+`--data-dir=/path/to/eurosat-splits/train`; keep validation and test separate.
+
 ## Acknowledgement
 
 This code is mainly built upon [edm2](https://github.com/NVlabs/edm2) repository.

@@ -35,6 +35,14 @@ pip install -r requirements.txt
 
 Currently, we provide experiments for [ImageNet](https://www.kaggle.com/competitions/imagenet-object-localization-challenge/data). You can place the data that you want and can specifiy it via `--data-dir` arguments in training scripts. Please refer to our [preprocessing guide](https://github.com/sihyun-yu/REPA/tree/master/preprocessing).
 
+For EuroSAT, create reproducible 70/15/15 train/validation/test splits of paired
+preprocessed images and latents with the
+[split script](preprocessing/split_eurosat.py).
+Train only on the resulting `train` directory. Validation should be used for
+checkpoint selection and tuning, but the current `train.py` does not accept a
+validation directory or run validation. Evaluate the `val` split separately;
+keep `test` untouched until final evaluation.
+
 ### 3. Training
 
 ```bash
