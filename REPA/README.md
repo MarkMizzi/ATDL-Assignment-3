@@ -42,7 +42,9 @@ Train only on the resulting `train` directory. Validation should be used for
 checkpoint selection and tuning; pass the resulting `val` directory with
 `--val-dir`. The script logs diffusion and alignment losses on the full
 validation split every five completed training epochs by default; adjust the
-interval with `--validation-epochs`. Keep `test` untouched until final evaluation.
+interval with `--validation-epochs`. Training losses are averaged and logged
+once per epoch. EMA sample grids are generated every ten completed epochs.
+Keep `test` untouched until final evaluation.
 
 ### 3. Training
 

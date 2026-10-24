@@ -422,10 +422,23 @@ def main(args):
             'val/diffusion_loss': denoising_loss_sum / num_examples,
             'val/alignment_loss': alignment_loss_sum / num_examples,
         }
-        
+
+    train_curve_epochs = []
+    train_diffusion_curve = []
+    train_alignment_curve = []
+    val_curve_epochs = []
+    val_diffusion_curve = []
+    val_alignment_curve = []
+
     for epoch in range(args.epochs):
         model.train()
         epoch_complete = True
+        epoch_diffusion_loss_sum = 0.0
+        epoch_alignment_loss_sum = 0.0
+        epoch_total_loss_sum = 0.0
+        epoch_example_count = 0
+        epoch_grad_norm_sum = 0.0
+        epoch_optimizer_steps = 0
         for batch_index, (raw_image, x, y) in enumerate(train_dataloader):
             if encoders:
                 raw_image = raw_image.to(device)
@@ -457,12 +470,19 @@ def main(args):
                 loss_mean = loss.mean()
                 proj_loss_mean = proj_loss.mean()
                 loss = loss_mean + proj_loss_mean * args.proj_coeff
+                batch_size = x.shape[0]
+                epoch_diffusion_loss_sum += loss_mean.detach().item() * batch_size
+                epoch_alignment_loss_sum += proj_loss_mean.detach().item() * batch_size
+                epoch_total_loss_sum += loss.detach().item() * batch_size
+                epoch_example_count += batch_size
                     
                 ## optimization
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
                     params_to_clip = model.parameters()
                     grad_norm = accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
+                    epoch_grad_norm_sum += grad_norm.detach().item()
+                    epoch_optimizer_steps += 1
                 optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
 
@@ -486,11 +506,12 @@ def main(args):
                     torch.save(checkpoint, checkpoint_path)
                     logger.info(f"Saved checkpoint to {checkpoint_path}")
 
-            if (global_step == 1 or (global_step % args.sampling_steps == 0 and global_step > 0)):
+            if (batch_index + 1 == len(train_dataloader)
+                    and (epoch + 1) % 10 == 0):
                 from samplers import euler_sampler
                 with torch.no_grad():
                     samples = euler_sampler(
-                        model, 
+                        ema,
                         xT, 
                         ys,
                         num_steps=50, 
@@ -520,26 +541,78 @@ def main(args):
                             caption=sample_grid_caption(gt_labels, args.class_names),
                         ),
                     }, step=global_step)
-                logging.info("Generating EMA samples done.")
+                logging.info(f"Generating EMA samples after epoch {epoch + 1} done.")
 
-            logs = {
-                "loss": accelerator.gather(loss_mean).mean().detach().item(), 
-                "proj_loss": accelerator.gather(proj_loss_mean).mean().detach().item(),
-                "grad_norm": accelerator.gather(grad_norm).mean().detach().item()
-            }
-            progress_bar.set_postfix(**logs)
-            accelerator.log(logs, step=global_step)
+            progress_bar.set_postfix(
+                loss=loss_mean.detach().item(),
+                proj_loss=proj_loss_mean.detach().item(),
+            )
 
             if global_step >= args.max_train_steps:
                 epoch_complete = batch_index + 1 == len(train_dataloader)
                 break
+
+        epoch_metrics = torch.tensor(
+            [
+                epoch_diffusion_loss_sum,
+                epoch_alignment_loss_sum,
+                epoch_total_loss_sum,
+                epoch_example_count,
+                epoch_grad_norm_sum,
+                epoch_optimizer_steps,
+            ],
+            dtype=torch.float64,
+            device=device,
+        )
+        epoch_metrics = accelerator.gather(epoch_metrics).view(-1, 6).sum(dim=0)
+        (diffusion_loss_sum, alignment_loss_sum, total_loss_sum, example_count,
+         grad_norm_sum, optimizer_step_count) = epoch_metrics.tolist()
+        epoch_logs = {
+            "train/epoch": epoch + 1,
+            "train/epoch_complete": int(epoch_complete),
+            "train/diffusion_loss": diffusion_loss_sum / example_count,
+            "train/alignment_loss": alignment_loss_sum / example_count,
+            "train/total_loss": total_loss_sum / example_count,
+        }
+        if optimizer_step_count > 0:
+            epoch_logs["train/grad_norm"] = grad_norm_sum / optimizer_step_count
+        if accelerator.is_main_process:
+            train_curve_epochs.append(epoch + 1)
+            train_diffusion_curve.append(epoch_logs["train/diffusion_loss"])
+            train_alignment_curve.append(epoch_logs["train/alignment_loss"])
+        accelerator.log(epoch_logs, step=global_step)
+        logger.info(
+            f"Training after epoch {epoch + 1} at step {global_step}: "
+            f"diffusion={epoch_logs['train/diffusion_loss']:.6f}, "
+            f"alignment={epoch_logs['train/alignment_loss']:.6f}, "
+            f"complete={epoch_complete}"
+        )
 
         if (epoch_complete and val_dataloader is not None
                 and (epoch + 1) % args.validation_epochs == 0):
             accelerator.wait_for_everyone()
             if accelerator.is_main_process:
                 val_logs = evaluate_validation_losses()
-                accelerator.log(val_logs, step=global_step)
+                val_curve_epochs.append(epoch + 1)
+                val_diffusion_curve.append(val_logs['val/diffusion_loss'])
+                val_alignment_curve.append(val_logs['val/alignment_loss'])
+                accelerator.log({
+                    **val_logs,
+                    "loss_curves/diffusion": wandb.plot.line_series(
+                        xs=[train_curve_epochs, val_curve_epochs],
+                        ys=[train_diffusion_curve, val_diffusion_curve],
+                        keys=["train", "validation"],
+                        title="Diffusion loss",
+                        xname="Epoch",
+                    ),
+                    "loss_curves/alignment": wandb.plot.line_series(
+                        xs=[train_curve_epochs, val_curve_epochs],
+                        ys=[train_alignment_curve, val_alignment_curve],
+                        keys=["train", "validation"],
+                        title="Alignment loss",
+                        xname="Epoch",
+                    ),
+                }, step=global_step)
                 logger.info(
                     f"Validation after epoch {epoch + 1} at step {global_step}: "
                     f"diffusion={val_logs['val/diffusion_loss']:.6f}, "
@@ -566,7 +639,6 @@ def parse_args(input_args=None):
     parser.add_argument("--exp-name", type=str, required=True)
     parser.add_argument("--logging-dir", type=str, default="logs")
     parser.add_argument("--report-to", type=str, default="wandb")
-    parser.add_argument("--sampling-steps", type=int, default=10000)
     parser.add_argument("--resume-step", type=int, default=0)
     parser.add_argument("--pretrained-path", type=str, default=None,
                         help="Trusted checkpoint for fine-tuning with fresh class embeddings and optimizer.")
