@@ -52,11 +52,17 @@ def fix_mocov3_state_dict(state_dict):
 class SatDINOEncoder(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        from transformers import AutoModel
+        from huggingface_hub import hf_hub_download
+        from transformers import AutoConfig, AutoModel
 
-        self.model = AutoModel.from_pretrained(
-            'strakajk/satdino-vit_base-16', trust_remote_code=True,
+        model_id = 'strakajk/satdino-vit_base-16'
+        config = AutoConfig.from_pretrained(model_id, trust_remote_code=True)
+        self.model = AutoModel.from_config(config, trust_remote_code=True)
+        weights_path = hf_hub_download(model_id, filename='pytorch_model.bin')
+        state_dict = torch.load(
+            weights_path, map_location='cpu', weights_only=True,
         )
+        self.model.load_state_dict(state_dict, strict=True)
         self.embed_dim = self.model.embed_dim
         self.requires_grad_(False)
         self.eval()

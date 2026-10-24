@@ -123,6 +123,12 @@ The first run downloads the encoder through Transformers with
 and trust that repository before using this option. Transformers is already
 listed in the requirements.
 
+SatDINO is constructed from its configuration, then its published
+`pytorch_model.bin` weights are loaded with PyTorch using `weights_only=True`
+and strict key checking. This bypasses the Transformers pretrained-loading
+path that fails with `all_tied_weights_keys` on this older custom model under
+Transformers 5. No dependency downgrade is required by this loading path.
+
 When adding SatDINO to a DINOv2-only ImageNet REPA checkpoint, use
 `--pretrained-path=/path/to/checkpoint.pt` and keep the same DINOv2 variant first
 in `--enc-type`. The pretrained DINOv2 projector is retained and only the new
