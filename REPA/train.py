@@ -35,6 +35,8 @@ logger = get_logger(__name__)
 
 CLIP_DEFAULT_MEAN = (0.48145466, 0.4578275, 0.40821073)
 CLIP_DEFAULT_STD = (0.26862954, 0.26130258, 0.27577711)
+SATDINO_DEFAULT_MEAN = (0.433, 0.436, 0.407)
+SATDINO_DEFAULT_STD = (0.198, 0.193, 0.195)
 
 def preprocess_raw_image(x, enc_type):
     resolution = x.shape[-1]
@@ -42,6 +44,9 @@ def preprocess_raw_image(x, enc_type):
         x = x / 255.
         x = torch.nn.functional.interpolate(x, 224 * (resolution // 256), mode='bicubic')
         x = Normalize(CLIP_DEFAULT_MEAN, CLIP_DEFAULT_STD)(x)
+    elif enc_type == 'satdino':
+        x = x / 255.
+        x = Normalize(SATDINO_DEFAULT_MEAN, SATDINO_DEFAULT_STD)(x)
     elif 'mocov3' in enc_type or 'mae' in enc_type:
         x = x / 255.
         x = Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)(x)
@@ -65,6 +70,18 @@ def array2grid(x):
     x = make_grid(x.clamp(0, 1), nrow=nrow, value_range=(0, 1))
     x = x.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to('cpu', torch.uint8).numpy()
     return x
+
+
+def sample_grid_caption(labels, class_names=None):
+    nrow = max(1, round(math.sqrt(len(labels))))
+    names = [
+        f"{label}: {class_names[label]}" if class_names else f"Class {label}"
+        for label in labels
+    ]
+    return '\n'.join(
+        f"Row {start // nrow + 1}: " + ' | '.join(names[start:start + nrow])
+        for start in range(0, len(names), nrow)
+    )
 
 
 @torch.no_grad()
@@ -154,13 +171,13 @@ def main(args):
     assert args.resolution % 8 == 0, "Image size must be divisible by 8 (for the VAE encoder)."
     latent_size = args.resolution // 8
 
-    if args.enc_type != None:
+    if args.enc_type != 'none':
         encoders, encoder_types, architectures = load_encoders(
             args.enc_type, device, args.resolution
             )
     else:
-        raise NotImplementedError()
-    z_dims = [encoder.embed_dim for encoder in encoders] if args.enc_type != 'None' else [0]
+        encoders, encoder_types, architectures = [], [], []
+    z_dims = [encoder.embed_dim for encoder in encoders]
     block_kwargs = {"fused_attn": args.fused_attn, "qk_norm": args.qk_norm}
     model = SiT_models[args.model](
         input_size=latent_size,
@@ -186,6 +203,48 @@ def main(args):
         state_dict = dict(state_dict)
         label_key = 'y_embedder.embedding_table.weight'
         state_dict[label_key] = model.state_dict()[label_key].detach().clone()
+        if args.reset_projectors or args.enc_type == 'none':
+            state_dict = {
+                key: value for key, value in state_dict.items()
+                if not key.startswith('projectors.')
+            }
+            state_dict.update({
+                key: value for key, value in model.state_dict().items()
+                if key.startswith('projectors.')
+            })
+            if args.enc_type == 'none':
+                logger.info("Pretrained alignment projectors discarded; alignment disabled.")
+            else:
+                logger.info("Alignment projectors initialized afresh.")
+        else:
+            saved_args = checkpoint.get('args')
+            saved_enc_type = (
+                saved_args.get('enc_type') if isinstance(saved_args, dict)
+                else getattr(saved_args, 'enc_type', None)
+            )
+            saved_enc_names = saved_enc_type.split(',') if saved_enc_type else None
+            if saved_enc_names is None:
+                logger.warning(
+                    "Checkpoint has no encoder metadata; existing projectors are "
+                    "matched by index. Keep their original encoder order and variants."
+                )
+            current_state = model.state_dict()
+            for index, enc_name in enumerate(args.enc_type.split(',')):
+                prefix = f'projectors.{index}.'
+                if saved_enc_names is not None and index < len(saved_enc_names):
+                    if saved_enc_names[index] != enc_name:
+                        raise ValueError(
+                            f"Projector {index} was trained for {saved_enc_names[index]}, "
+                            f"not {enc_name}. Keep the pretrained encoder order or "
+                            "use --reset-projectors."
+                        )
+                elif not any(key.startswith(prefix) for key in state_dict):
+                    state_dict.update({
+                        key: value.detach().clone()
+                        for key, value in current_state.items()
+                        if key.startswith(prefix)
+                    })
+                    logger.info(f"New alignment projector initialized for {enc_name}.")
         model.load_state_dict(state_dict, strict=True)
         logger.info(
             f"Loaded pretrained weights from {args.pretrained_path}; "
@@ -287,9 +346,10 @@ def main(args):
 
     # Labels to condition the model with (feel free to change):
     sample_batch_size = 64 // accelerator.num_processes
-    gt_raw_images, gt_xs, _ = next(iter(train_dataloader))
+    gt_raw_images, gt_xs, gt_ys = next(iter(train_dataloader))
     assert gt_raw_images.shape[-1] == args.resolution
     gt_xs = gt_xs[:sample_batch_size]
+    gt_ys = gt_ys[:sample_batch_size].to(device)
     gt_xs = sample_posterior(
         gt_xs.to(device), latents_scale=latents_scale, latents_bias=latents_bias
         )
@@ -302,7 +362,8 @@ def main(args):
     for epoch in range(args.epochs):
         model.train()
         for raw_image, x, y in train_dataloader:
-            raw_image = raw_image.to(device)
+            if encoders:
+                raw_image = raw_image.to(device)
             x = x.squeeze(dim=1).to(device)
             y = y.to(device)
             z = None
@@ -381,8 +442,19 @@ def main(args):
                     gt_samples = (gt_samples + 1) / 2.
                 out_samples = accelerator.gather(samples.to(torch.float32))
                 gt_samples = accelerator.gather(gt_samples.to(torch.float32))
-                accelerator.log({"samples": wandb.Image(array2grid(out_samples)),
-                                 "gt_samples": wandb.Image(array2grid(gt_samples))})
+                out_labels = accelerator.gather(ys).cpu().tolist()
+                gt_labels = accelerator.gather(gt_ys).cpu().tolist()
+                if accelerator.is_main_process:
+                    accelerator.log({
+                        "samples": wandb.Image(
+                            array2grid(out_samples),
+                            caption=sample_grid_caption(out_labels, args.class_names),
+                        ),
+                        "gt_samples": wandb.Image(
+                            array2grid(gt_samples),
+                            caption=sample_grid_caption(gt_labels, args.class_names),
+                        ),
+                    }, step=global_step)
                 logging.info("Generating EMA samples done.")
 
             logs = {
@@ -418,6 +490,8 @@ def parse_args(input_args=None):
     parser.add_argument("--resume-step", type=int, default=0)
     parser.add_argument("--pretrained-path", type=str, default=None,
                         help="Trusted checkpoint for fine-tuning with fresh class embeddings and optimizer.")
+    parser.add_argument("--reset-projectors", action="store_true",
+                        help="Reset alignment projectors when changing pretrained alignment encoders.")
 
     # model
     parser.add_argument("--model", type=str)
@@ -430,6 +504,8 @@ def parse_args(input_args=None):
     parser.add_argument("--data-dir", type=str, default="../data/imagenet256")
     parser.add_argument("--resolution", type=int, choices=[256, 512], default=256)
     parser.add_argument("--batch-size", type=int, default=256)
+    parser.add_argument("--class-names", nargs='+', default=None,
+                        help="Names in class-ID order for sample captions; defaults to alphabetical EuroSAT names for 10 classes, otherwise numeric IDs.")
 
     # precision
     parser.add_argument("--allow-tf32", action="store_true")
@@ -457,7 +533,8 @@ def parse_args(input_args=None):
     parser.add_argument("--path-type", type=str, default="linear", choices=["linear", "cosine"])
     parser.add_argument("--prediction", type=str, default="v", choices=["v"]) # currently we only support v-prediction
     parser.add_argument("--cfg-prob", type=float, default=0.1)
-    parser.add_argument("--enc-type", type=str, default='dinov2-vit-b')
+    parser.add_argument("--enc-type", type=str, default='dinov2-vit-b',
+                        help="Comma-separated alignment encoders, or 'none' for diffusion-only training.")
     parser.add_argument("--proj-coeff", type=float, default=0.5)
     parser.add_argument("--weighting", default="uniform", type=str, help="Max gradient norm.")
     parser.add_argument("--legacy", action=argparse.BooleanOptionalAction, default=False)
@@ -467,8 +544,20 @@ def parse_args(input_args=None):
     else:
         args = parser.parse_args()
 
+    if args.enc_type.lower() == 'none':
+        args.enc_type = 'none'
+    if args.class_names is None and args.num_classes == 10:
+        args.class_names = [
+            'AnnualCrop', 'Forest', 'HerbaceousVegetation', 'Highway',
+            'Industrial', 'Pasture', 'PermanentCrop', 'Residential',
+            'River', 'SeaLake',
+        ]
+    if args.class_names is not None and len(args.class_names) != args.num_classes:
+        parser.error("--class-names must provide one name per class in class-ID order")
     if args.pretrained_path and args.resume_step > 0:
         parser.error("--pretrained-path and --resume-step cannot be combined")
+    if args.reset_projectors and not args.pretrained_path:
+        parser.error("--reset-projectors requires --pretrained-path")
 
     return args
 

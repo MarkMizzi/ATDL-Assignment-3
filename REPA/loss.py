@@ -77,6 +77,9 @@ class SILoss:
         model_output, zs_tilde  = model(model_input, time_input.flatten(), **model_kwargs)
         denoising_loss = mean_flat((model_output - model_target) ** 2)
 
+        if not zs:
+            return denoising_loss, torch.zeros_like(denoising_loss)
+
         # projection loss
         proj_loss = 0.
         bsz = zs[0].shape[0]

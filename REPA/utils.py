@@ -49,6 +49,22 @@ def fix_mocov3_state_dict(state_dict):
         )
     return state_dict
 
+class SatDINOEncoder(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        from transformers import AutoModel
+
+        self.model = AutoModel.from_pretrained(
+            'strakajk/satdino-vit_base-16', trust_remote_code=True,
+        )
+        self.embed_dim = self.model.embed_dim
+        self.requires_grad_(False)
+        self.eval()
+
+    def forward_features(self, images):
+        return self.model(images, return_all=True)[:, 1:-1]
+
+
 @torch.no_grad()
 def load_encoders(enc_type, device, resolution=256):
     assert (resolution == 256) or (resolution == 512)
@@ -66,7 +82,12 @@ def load_encoders(enc_type, device, resolution=256):
 
         architectures.append(architecture)
         encoder_types.append(encoder_type)
-        if encoder_type == 'mocov3':
+        if encoder_type == 'satdino':
+            if architecture != 'vit' or model_config != 'b':
+                raise ValueError("SatDINO supports --enc-type=satdino-vit-b")
+            encoder = SatDINOEncoder().to(device)
+
+        elif encoder_type == 'mocov3':
             if architecture == 'vit':
                 if model_config == 's':
                     encoder = mocov3_vit.vit_small()

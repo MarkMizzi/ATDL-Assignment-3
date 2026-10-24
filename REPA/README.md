@@ -71,6 +71,71 @@ For DINOv2 models, it will be automatically downloaded from `torch.hub`. For CLI
 - `jepa`: Download the ViT-H/14 model (ImageNet-1K) from the [`I-JEPA`](https://github.com/facebookresearch/ijepa) repository and place it as `./ckpts/ijepa_vith.pth`
 - `mae`: Download the ViT-L model from [`MAE`](https://github.com/facebookresearch/mae) repository and place it as `./ckpts/mae_vitl.pth`
 
+#### Sample class captions
+
+W&B captions for `samples` and `gt_samples` list class IDs and names row by row,
+from left to right in each grid. Labels are gathered in the same process order
+as images in distributed runs. For `--num-classes=10`, the default names follow
+alphabetical EuroSAT class-folder order: AnnualCrop, Forest,
+HerbaceousVegetation, Highway, Industrial, Pasture, PermanentCrop, Residential,
+River, SeaLake.
+
+If your label mapping differs, pass `--class-names` followed by one name per
+class in ID order (quote names containing spaces). Other class counts use
+numeric IDs unless names are supplied. Names affect captions only, not training.
+
+#### Training without alignment
+
+Pass `--enc-type=none` to `train.py` for diffusion-only training. No alignment
+encoder is loaded and no alignment projectors are created. The alignment loss
+is zero and `--proj-coeff` has no effect. Class conditioning is unchanged.
+
+This works both from scratch and with `--pretrained-path=/path/to/checkpoint.pt`.
+When fine-tuning a REPA checkpoint, its alignment projector weights are discarded
+automatically while the SiT backbone is retained. No `--reset-projectors` flag
+is needed. Resume diffusion-only checkpoints with `--enc-type=none` as well;
+use pretrained loading, not `--resume-step`, to switch an aligned run to this mode.
+
+#### SatDINO alignment on EuroSAT
+
+For RGB EuroSAT training with `train.py`, use the frozen
+[`strakajk/satdino-vit_base-16`](https://huggingface.co/strakajk/satdino-vit_base-16)
+encoder instead of DINOv2:
+
+```bash
+--enc-type=satdino-vit-b --resolution=256 --num-classes=10
+```
+
+Or align to both encoders with separate learned projectors:
+
+```bash
+--enc-type=dinov2-vit-l,satdino-vit-b --resolution=256 --num-classes=10
+```
+
+The existing loss averages the two alignment losses equally; `--proj-coeff`
+weights their combined contribution. SatDINO uses fMoW RGB normalization and
+256x256 inputs, producing 256 patch tokens of width 768 for SiT `/2` models.
+Its class and trailing GSD register tokens are excluded. DINOv2 preprocessing
+is unchanged. SatDINO alignment is currently supported only at resolution 256.
+
+The first run downloads the encoder through Transformers with
+`trust_remote_code=True`, which executes code from the model repository. Review
+and trust that repository before using this option. Transformers is already
+listed in the requirements.
+
+When adding SatDINO to a DINOv2-only ImageNet REPA checkpoint, use
+`--pretrained-path=/path/to/checkpoint.pt` and keep the same DINOv2 variant first
+in `--enc-type`. The pretrained DINOv2 projector is retained and only the new
+SatDINO projector is initialized afresh. Do not pass `--reset-projectors` in
+this case. Saved encoder metadata is checked when available; checkpoints without
+metadata are matched by projector index, so their original encoder order and
+variants must be preserved.
+
+To replace DINOv2 with SatDINO alone or change an existing encoder selection,
+add `--reset-projectors`. This initializes all alignment projectors afresh
+while retaining the pretrained SiT backbone. Do not use this flag when resuming
+the same run. Only SatDINO ViT-B/16 is supported.
+
 **[12/17/2024]**: We also support training on 512x512 resolution (ImageNet) and a text-to-image generation on MS-COCO.
 
 For ImageNet 512x512, please use the following script:
