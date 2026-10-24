@@ -30,7 +30,8 @@ python preprocessing/split_eurosat.py --source=/path/to/eurosat --dest=/path/to/
 ```
 
 This creates stratified 70/15/15 `train`, `val`, and `test` folders. Train with
-`--data-dir=/path/to/eurosat-splits/train`; keep validation and test separate.
+`--data-dir=/path/to/eurosat-splits/train` and evaluate validation with
+`--val-dir=/path/to/eurosat-splits/val`; keep test separate for final evaluation.
 
 ## Acknowledgement
 

@@ -39,9 +39,10 @@ For EuroSAT, create reproducible 70/15/15 train/validation/test splits of paired
 preprocessed images and latents with the
 [split script](preprocessing/split_eurosat.py).
 Train only on the resulting `train` directory. Validation should be used for
-checkpoint selection and tuning, but the current `train.py` does not accept a
-validation directory or run validation. Evaluate the `val` split separately;
-keep `test` untouched until final evaluation.
+checkpoint selection and tuning; pass the resulting `val` directory with
+`--val-dir`. The script logs diffusion and alignment losses on the full
+validation split every five completed training epochs by default; adjust the
+interval with `--validation-epochs`. Keep `test` untouched until final evaluation.
 
 ### 3. Training
 

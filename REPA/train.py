@@ -300,6 +300,21 @@ def main(args):
         pin_memory=True,
         drop_last=True
     )
+    val_dataloader = None
+    if args.val_dir and accelerator.is_main_process:
+        val_dataset = CustomDataset(args.val_dir)
+        val_dataloader = DataLoader(
+            val_dataset,
+            batch_size=local_batch_size,
+            shuffle=False,
+            num_workers=args.num_workers,
+            pin_memory=True,
+            drop_last=False,
+        )
+        logger.info(
+            f"Validation uses all {len(val_dataset):,} images "
+            f"from {args.val_dir}."
+        )
     if accelerator.is_main_process:
         logger.info(f"Dataset contains {len(train_dataset):,} images ({args.data_dir})")
     
@@ -358,10 +373,60 @@ def main(args):
     # Create sampling noise:
     n = ys.size(0)
     xT = torch.randn((n, 4, latent_size, latent_size), device=device)
+
+    def evaluate_validation_losses():
+        cpu_rng_state = torch.get_rng_state()
+        cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+        validation_seed = args.seed + 100003
+        torch.manual_seed(validation_seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(validation_seed)
+
+        denoising_loss_sum = 0.0
+        alignment_loss_sum = 0.0
+        num_examples = 0
+        try:
+            ema.eval()
+            with torch.no_grad():
+                for raw_image, moments, labels in val_dataloader:
+                    raw_image = raw_image.to(device) if encoders else None
+                    moments = moments.squeeze(dim=1).to(device)
+                    labels = labels.to(device)
+                    images = sample_posterior(
+                        moments, latents_scale=latents_scale, latents_bias=latents_bias,
+                    )
+                    zs = []
+                    with accelerator.autocast():
+                        for encoder, encoder_type in zip(encoders, encoder_types):
+                            raw_image_ = preprocess_raw_image(raw_image, encoder_type)
+                            features = encoder.forward_features(raw_image_)
+                            if 'mocov3' in encoder_type:
+                                features = features[:, 1:]
+                            if 'dinov2' in encoder_type:
+                                features = features['x_norm_patchtokens']
+                            zs.append(features)
+                        denoising_loss, alignment_loss = loss_fn(
+                            ema, images, dict(y=labels), zs=zs,
+                        )
+
+                    batch_size = images.shape[0]
+                    denoising_loss_sum += denoising_loss.sum().item()
+                    alignment_loss_sum += alignment_loss.sum().item()
+                    num_examples += batch_size
+        finally:
+            torch.set_rng_state(cpu_rng_state)
+            if cuda_rng_state is not None:
+                torch.cuda.set_rng_state_all(cuda_rng_state)
+
+        return {
+            'val/diffusion_loss': denoising_loss_sum / num_examples,
+            'val/alignment_loss': alignment_loss_sum / num_examples,
+        }
         
     for epoch in range(args.epochs):
         model.train()
-        for raw_image, x, y in train_dataloader:
+        epoch_complete = True
+        for batch_index, (raw_image, x, y) in enumerate(train_dataloader):
             if encoders:
                 raw_image = raw_image.to(device)
             x = x.squeeze(dim=1).to(device)
@@ -407,7 +472,7 @@ def main(args):
             ### enter
             if accelerator.sync_gradients:
                 progress_bar.update(1)
-                global_step += 1                
+                global_step += 1
             if global_step % args.checkpointing_steps == 0 and global_step > 0:
                 if accelerator.is_main_process:
                     checkpoint = {
@@ -466,7 +531,22 @@ def main(args):
             accelerator.log(logs, step=global_step)
 
             if global_step >= args.max_train_steps:
+                epoch_complete = batch_index + 1 == len(train_dataloader)
                 break
+
+        if (epoch_complete and val_dataloader is not None
+                and (epoch + 1) % args.validation_epochs == 0):
+            accelerator.wait_for_everyone()
+            if accelerator.is_main_process:
+                val_logs = evaluate_validation_losses()
+                accelerator.log(val_logs, step=global_step)
+                logger.info(
+                    f"Validation after epoch {epoch + 1} at step {global_step}: "
+                    f"diffusion={val_logs['val/diffusion_loss']:.6f}, "
+                    f"alignment={val_logs['val/alignment_loss']:.6f}"
+                )
+            accelerator.wait_for_everyone()
+
         if global_step >= args.max_train_steps:
             break
 
@@ -502,8 +582,12 @@ def parse_args(input_args=None):
 
     # dataset
     parser.add_argument("--data-dir", type=str, default="../data/imagenet256")
+    parser.add_argument("--val-dir", type=str, default=None,
+                        help="Optional held-out dataset directory for loss evaluation.")
     parser.add_argument("--resolution", type=int, choices=[256, 512], default=256)
     parser.add_argument("--batch-size", type=int, default=256)
+    parser.add_argument("--validation-epochs", type=int, default=5,
+                        help="Run validation after each N completed training epochs.")
     parser.add_argument("--class-names", nargs='+', default=None,
                         help="Names in class-ID order for sample captions; defaults to alphabetical EuroSAT names for 10 classes, otherwise numeric IDs.")
 
@@ -554,6 +638,8 @@ def parse_args(input_args=None):
         ]
     if args.class_names is not None and len(args.class_names) != args.num_classes:
         parser.error("--class-names must provide one name per class in class-ID order")
+    if args.validation_epochs < 1:
+        parser.error("--validation-epochs must be positive")
     if args.pretrained_path and args.resume_step > 0:
         parser.error("--pretrained-path and --resume-step cannot be combined")
     if args.reset_projectors and not args.pretrained_path:
