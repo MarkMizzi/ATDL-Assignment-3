@@ -80,14 +80,13 @@ class SILoss:
         if not zs:
             return denoising_loss, torch.zeros_like(denoising_loss)
 
-        # projection loss
-        proj_loss = 0.
-        bsz = zs[0].shape[0]
-        for i, (z, z_tilde) in enumerate(zip(zs, zs_tilde)):
-            for j, (z_j, z_tilde_j) in enumerate(zip(z, z_tilde)):
-                z_tilde_j = torch.nn.functional.normalize(z_tilde_j, dim=-1) 
-                z_j = torch.nn.functional.normalize(z_j, dim=-1) 
-                proj_loss += mean_flat(-(z_j * z_tilde_j).sum(dim=-1))
-        proj_loss /= (len(zs) * bsz)
+        # Return one patch-averaged alignment loss per example.
+        proj_loss = None
+        for z, z_tilde in zip(zs, zs_tilde):
+            z_tilde = torch.nn.functional.normalize(z_tilde, dim=-1)
+            z = torch.nn.functional.normalize(z, dim=-1)
+            encoder_loss = -(z * z_tilde).sum(dim=-1).mean(dim=-1)
+            proj_loss = encoder_loss if proj_loss is None else proj_loss + encoder_loss
+        proj_loss = proj_loss / len(zs)
 
         return denoising_loss, proj_loss
