@@ -12,7 +12,7 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from tqdm.auto import tqdm
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 
 from accelerate import Accelerator
 from accelerate.logging import get_logger
@@ -82,6 +82,29 @@ def sample_grid_caption(labels, class_names=None):
         f"Row {start // nrow + 1}: " + ' | '.join(names[start:start + nrow])
         for start in range(0, len(names), nrow)
     )
+
+
+def balanced_subset_indices(labels, size, seed):
+    labels = np.asarray(labels)
+    size = min(size, len(labels))
+    classes = np.unique(labels)
+    if size <= 0 or len(classes) == 0:
+        raise ValueError("Training evaluation subset and labels must be non-empty")
+
+    rng = np.random.default_rng(seed)
+    base_count, remainder = divmod(size, len(classes))
+    selected = []
+    for class_index, label in enumerate(classes):
+        indices = np.flatnonzero(labels == label)
+        rng.shuffle(indices)
+        class_count = base_count + (class_index < remainder)
+        if len(indices) < class_count:
+            raise ValueError(
+                f"Training class {label} has {len(indices)} samples; "
+                f"{class_count} are needed for an evaluation subset of size {size}."
+            )
+        selected.extend(indices[:class_count].tolist())
+    return sorted(selected)
 
 
 @torch.no_grad()
@@ -301,8 +324,22 @@ def main(args):
         drop_last=True
     )
     val_dataloader = None
+    train_eval_dataloader = None
     if args.val_dir and accelerator.is_main_process:
         val_dataset = CustomDataset(args.val_dir)
+        train_eval_size = min(len(train_dataset), len(val_dataset))
+        train_eval_indices = balanced_subset_indices(
+            train_dataset.labels, train_eval_size, args.seed + 100003,
+        )
+        train_eval_dataset = Subset(train_dataset, train_eval_indices)
+        train_eval_dataloader = DataLoader(
+            train_eval_dataset,
+            batch_size=local_batch_size,
+            shuffle=False,
+            num_workers=args.num_workers,
+            pin_memory=True,
+            drop_last=False,
+        )
         val_dataloader = DataLoader(
             val_dataset,
             batch_size=local_batch_size,
@@ -313,7 +350,8 @@ def main(args):
         )
         logger.info(
             f"Validation uses all {len(val_dataset):,} images "
-            f"from {args.val_dir}."
+            f"from {args.val_dir}; train-eval uses a fixed, class-balanced "
+            f"subset of {len(train_eval_dataset):,} training images."
         )
     if accelerator.is_main_process:
         logger.info(f"Dataset contains {len(train_dataset):,} images ({args.data_dir})")
@@ -374,7 +412,7 @@ def main(args):
     n = ys.size(0)
     xT = torch.randn((n, 4, latent_size, latent_size), device=device)
 
-    def evaluate_validation_losses():
+    def evaluate_losses(dataloader, split):
         cpu_rng_state = torch.get_rng_state()
         cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
         validation_seed = args.seed + 100003
@@ -388,7 +426,7 @@ def main(args):
         try:
             ema.eval()
             with torch.no_grad():
-                for raw_image, moments, labels in val_dataloader:
+                for raw_image, moments, labels in dataloader:
                     raw_image = raw_image.to(device) if encoders else None
                     moments = moments.squeeze(dim=1).to(device)
                     labels = labels.to(device)
@@ -419,13 +457,13 @@ def main(args):
                 torch.cuda.set_rng_state_all(cuda_rng_state)
 
         return {
-            'val/diffusion_loss': denoising_loss_sum / num_examples,
-            'val/alignment_loss': alignment_loss_sum / num_examples,
+            f'{split}/diffusion_loss': denoising_loss_sum / num_examples,
+            f'{split}/alignment_loss': alignment_loss_sum / num_examples,
         }
 
-    train_curve_epochs = []
-    train_diffusion_curve = []
-    train_alignment_curve = []
+    loss_curve_epochs = []
+    train_eval_diffusion_curve = []
+    train_eval_alignment_curve = []
     val_curve_epochs = []
     val_diffusion_curve = []
     val_alignment_curve = []
@@ -576,10 +614,6 @@ def main(args):
         }
         if optimizer_step_count > 0:
             epoch_logs["train/grad_norm"] = grad_norm_sum / optimizer_step_count
-        if accelerator.is_main_process:
-            train_curve_epochs.append(epoch + 1)
-            train_diffusion_curve.append(epoch_logs["train/diffusion_loss"])
-            train_alignment_curve.append(epoch_logs["train/alignment_loss"])
         accelerator.log(epoch_logs, step=global_step)
         logger.info(
             f"Training after epoch {epoch + 1} at step {global_step}: "
@@ -592,29 +626,40 @@ def main(args):
                 and (epoch + 1) % args.validation_epochs == 0):
             accelerator.wait_for_everyone()
             if accelerator.is_main_process:
-                val_logs = evaluate_validation_losses()
+                train_eval_logs = evaluate_losses(train_eval_dataloader, 'train_eval')
+                val_logs = evaluate_losses(val_dataloader, 'val')
+                loss_curve_epochs.append(epoch + 1)
+                train_eval_diffusion_curve.append(
+                    train_eval_logs['train_eval/diffusion_loss']
+                )
+                train_eval_alignment_curve.append(
+                    train_eval_logs['train_eval/alignment_loss']
+                )
                 val_curve_epochs.append(epoch + 1)
                 val_diffusion_curve.append(val_logs['val/diffusion_loss'])
                 val_alignment_curve.append(val_logs['val/alignment_loss'])
                 accelerator.log({
+                    **train_eval_logs,
                     **val_logs,
                     "loss_curves/diffusion": wandb.plot.line_series(
-                        xs=[train_curve_epochs, val_curve_epochs],
-                        ys=[train_diffusion_curve, val_diffusion_curve],
-                        keys=["train", "validation"],
+                        xs=[loss_curve_epochs, val_curve_epochs],
+                        ys=[train_eval_diffusion_curve, val_diffusion_curve],
+                        keys=["train-eval", "validation"],
                         title="Diffusion loss",
                         xname="Epoch",
                     ),
                     "loss_curves/alignment": wandb.plot.line_series(
-                        xs=[train_curve_epochs, val_curve_epochs],
-                        ys=[train_alignment_curve, val_alignment_curve],
-                        keys=["train", "validation"],
+                        xs=[loss_curve_epochs, val_curve_epochs],
+                        ys=[train_eval_alignment_curve, val_alignment_curve],
+                        keys=["train-eval", "validation"],
                         title="Alignment loss",
                         xname="Epoch",
                     ),
                 }, step=global_step)
                 logger.info(
-                    f"Validation after epoch {epoch + 1} at step {global_step}: "
+                    f"Train-eval/validation after epoch {epoch + 1} at step {global_step}: "
+                    f"train-eval diffusion={train_eval_logs['train_eval/diffusion_loss']:.6f}, "
+                    f"train-eval alignment={train_eval_logs['train_eval/alignment_loss']:.6f}, "
                     f"diffusion={val_logs['val/diffusion_loss']:.6f}, "
                     f"alignment={val_logs['val/alignment_loss']:.6f}"
                 )
