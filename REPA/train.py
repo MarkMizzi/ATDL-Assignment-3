@@ -153,6 +153,61 @@ def requires_grad(model, flag=True):
         p.requires_grad = flag
 
 
+LORA_TARGET_PATTERNS = {
+    'qkv': r'attn\.qkv',
+    'proj': r'attn\.proj',
+    'fc1': r'mlp\.fc1',
+    'fc2': r'mlp\.fc2',
+    'adaLN_modulation': r'adaLN_modulation\.1',
+}
+
+
+def lora_target_regex(targets):
+    # Scoped to SiT blocks: a bare "proj" would also match the x_embedder.proj Conv2d.
+    return r'blocks\.\d+\.(' + '|'.join(LORA_TARGET_PATTERNS[t] for t in targets) + r')'
+
+
+def apply_lora(model, rank, targets, train_io=False):
+    from peft import LoraConfig, get_peft_model
+
+    config = LoraConfig(
+        r=rank,
+        lora_alpha=rank,
+        lora_dropout=0.0,
+        bias='none',
+        target_modules=lora_target_regex(targets),
+    )
+    model = get_peft_model(model, config)
+    # New class embeddings and alignment projectors must stay fully trainable.
+    trainable = ['.y_embedder.', '.projectors.']
+    if train_io:
+        trainable += ['.x_embedder.', '.final_layer.']
+    for name, param in model.named_parameters():
+        if any(part in name for part in trainable):
+            param.requires_grad = True
+    return model
+
+
+@torch.no_grad()
+def merged_lora_state_dict(peft_model):
+    """Plain SiT state dict with LoRA deltas merged in, built on CPU."""
+    from peft.tuners.lora import LoraLayer
+
+    base = peft_model.get_base_model()
+    state = {
+        key.replace('.base_layer.', '.'): value.detach().cpu().clone()
+        for key, value in base.state_dict().items()
+        if '.lora_' not in key
+    }
+    for name, module in base.named_modules():
+        if isinstance(module, LoraLayer):
+            weight_key = f'{name}.weight'
+            for adapter in module.active_adapters:
+                delta = module.get_delta_weight(adapter).detach().cpu()
+                state[weight_key] += delta.to(state[weight_key].dtype)
+    return state
+
+
 #################################################################################
 #                                  Training Loop                                #
 #################################################################################
@@ -274,6 +329,16 @@ def main(args):
             "class embeddings initialized afresh."
         )
 
+    if args.lora_rank > 0:
+        model = apply_lora(model, args.lora_rank, args.lora_targets, args.lora_train_io)
+        if accelerator.is_main_process:
+            trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+            total_params = sum(p.numel() for p in model.parameters())
+            logger.info(
+                f"LoRA rank {args.lora_rank} on {','.join(args.lora_targets)}: "
+                f"{trainable_params:,} of {total_params:,} parameters trainable."
+            )
+
     model = model.to(device)
     ema = deepcopy(model).to(device)  # Create an EMA of the model for use after training
     vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-mse").to(device)
@@ -305,7 +370,8 @@ def main(args):
         torch.backends.cudnn.allow_tf32 = True
 
     optimizer = torch.optim.AdamW(
-        model.parameters(),
+        [p for p in model.parameters() if p.requires_grad] if args.lora_rank > 0
+        else model.parameters(),
         lr=args.learning_rate,
         betas=(args.adam_beta1, args.adam_beta2),
         weight_decay=args.adam_weight_decay,
@@ -370,8 +436,16 @@ def main(args):
             map_location='cpu',
             weights_only=False,
             )
-        model.load_state_dict(ckpt['model'])
-        ema.load_state_dict(ckpt['ema'])
+        if args.lora_rank > 0:
+            if 'lora_model' not in ckpt or 'lora_ema' not in ckpt:
+                raise ValueError(
+                    f"Checkpoint {ckpt_name} has no LoRA state; resume it without --lora-rank."
+                )
+            model.load_state_dict(ckpt['lora_model'])
+            ema.load_state_dict(ckpt['lora_ema'])
+        else:
+            model.load_state_dict(ckpt['model'])
+            ema.load_state_dict(ckpt['ema'])
         optimizer.load_state_dict(ckpt['opt'])
         global_step = ckpt['steps']
 
@@ -540,6 +614,15 @@ def main(args):
                         "args": args,
                         "steps": global_step,
                     }
+                    if args.lora_rank > 0:
+                        lora_model = accelerator.unwrap_model(model)
+                        # Merged weights keep generate.py and --pretrained-path compatible.
+                        checkpoint.update({
+                            "model": merged_lora_state_dict(lora_model),
+                            "ema": merged_lora_state_dict(ema),
+                            "lora_model": lora_model.state_dict(),
+                            "lora_ema": ema.state_dict(),
+                        })
                     checkpoint_path = f"{checkpoint_dir}/{global_step:07d}.pt"
                     torch.save(checkpoint, checkpoint_path)
                     logger.info(f"Saved checkpoint to {checkpoint_path}")
@@ -689,6 +772,12 @@ def parse_args(input_args=None):
                         help="Trusted checkpoint for fine-tuning with fresh class embeddings and optimizer.")
     parser.add_argument("--reset-projectors", action="store_true",
                         help="Reset alignment projectors when changing pretrained alignment encoders.")
+    parser.add_argument("--lora-rank", type=int, default=0,
+                        help="LoRA rank for fine-tuning; 0 disables LoRA (full fine-tuning).")
+    parser.add_argument("--lora-targets", type=str, default="qkv,proj,fc1,fc2",
+                        help=f"Comma-separated SiT block layers for LoRA: {','.join(LORA_TARGET_PATTERNS)}.")
+    parser.add_argument("--lora-train-io", action="store_true",
+                        help="With LoRA, also fully train the patch embedding and final layer.")
 
     # model
     parser.add_argument("--model", type=str)
@@ -761,6 +850,19 @@ def parse_args(input_args=None):
         parser.error("--pretrained-path and --resume-step cannot be combined")
     if args.reset_projectors and not args.pretrained_path:
         parser.error("--reset-projectors requires --pretrained-path")
+    if args.lora_rank < 0:
+        parser.error("--lora-rank must be non-negative")
+    args.lora_targets = [target.strip() for target in args.lora_targets.split(',') if target.strip()]
+    unknown_targets = sorted(set(args.lora_targets) - set(LORA_TARGET_PATTERNS))
+    if unknown_targets or not args.lora_targets:
+        parser.error(
+            f"--lora-targets must be a non-empty subset of {','.join(LORA_TARGET_PATTERNS)}; "
+            f"got unknown {','.join(unknown_targets)}"
+        )
+    if args.lora_rank > 0 and not (args.pretrained_path or args.resume_step > 0):
+        parser.error("--lora-rank requires --pretrained-path or --resume-step")
+    if args.lora_train_io and args.lora_rank == 0:
+        parser.error("--lora-train-io requires --lora-rank")
 
     return args
 

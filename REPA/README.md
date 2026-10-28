@@ -98,6 +98,17 @@ If your label mapping differs, pass `--class-names` followed by one name per
 class in ID order (quote names containing spaces). Other class counts use
 numeric IDs unless names are supplied. Names affect captions only, not training.
 
+#### LoRA fine-tuning
+
+Pass `--lora-rank=16` with `--pretrained-path` to fine-tune with PEFT LoRA
+adapters instead of all weights (try `--learning-rate=1e-4`). `--lora-targets`
+selects SiT block layers from `qkv,proj,fc1,fc2,adaLN_modulation` (default
+`qkv,proj,fc1,fc2`). Class embeddings and alignment projectors stay fully
+trainable; add `--lora-train-io` to also fully train the patch embedding and
+final layer. Checkpoints store merged plain weights under `model`/`ema`, so
+`generate.py` works unchanged, plus `lora_model`/`lora_ema` for `--resume-step`
+(resume with the same LoRA options). Omitting `--lora-rank` keeps full fine-tuning.
+
 #### Training without alignment
 
 Pass `--enc-type=none` to `train.py` for diffusion-only training. No alignment
