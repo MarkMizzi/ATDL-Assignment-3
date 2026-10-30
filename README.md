@@ -38,19 +38,20 @@ python extract_images_from_npz.py SiT-L-2-0400000-size-256-vae-ema-cfg-1.0-seed-
 | | **Base Models** | | | | | | | | |
 | 6  | TBD                 | EuroSAT          | SiT-L/2                   | Yes      | SatDINO-S                                   | 8     | Natasha    |                     |                  |
 | 7  | TBD                 | EuroSAT          | SiT-L/2                   | Yes      | SatDINO-B                                   | 8     | Natasha    |                     |                  |
+| 8  | TBD                 | EuroSAT          | SiT-L/2                   | Yes      | SatDINO-B + DINOv2-L                        | 8     | Natasha    |                     |                  |
 | | **LoRa fine-tuning** | | | | | | | | |
-| 8  | TBD                 | EuroSAT          | SiT-L/2 (LoRa fine-tuned) | Yes      | SatDINO-S                                   | 8     | Natasha    |                     |                  |
-| 9  | TBD                 | EuroSAT          | SiT-L/2 (LoRa fine-tuned) | Yes      | SatDINO-B                                   | 8     | Natasha    |                     |                  |
+| 9  | TBD                 | EuroSAT          | SiT-L/2 (LoRa fine-tuned) | Yes      | SatDINO-S                                   | 8     | Natasha    |                     |                  |
+| 10 | TBD                 | EuroSAT          | SiT-L/2 (LoRa fine-tuned) | Yes      | SatDINO-B                                   | 8     | Natasha    |                     |                  |
 | | **Depth ablation** | | | | | | | | |
-| 10 | TBD                 | EuroSAT          | SiT-L/2                   | Yes      | SatDINO-B                                   | 6     | Frederik   |                     |                  |
-| 11 | TBD                 | EuroSAT          | SiT-L/2                   | Yes      | SatDINO-B                                   | 10    | Frederik   |                     |                  |
-| 12 | TBD                 | EuroSAT          | SiT-L/2                   | Yes      | SatDINO-B                                   | 12    | Frederik   |                     |                  |
-| 13 | TBD                 | EuroSAT          | SiT-L/2                   | Yes      | SatDINO-B                                   | 14    | Frederik   |                     |                  |
-| 14 | TBD                 | EuroSAT          | SiT-L/2                   | Yes      | SatDINO-B                                   | 16    | Frederik   |                     |                  |
+| 11 | TBD                 | EuroSAT          | SiT-L/2                   | Yes      | SatDINO-B                                   | 6     | Frederik   |                     |                  |
+| 12 | TBD                 | EuroSAT          | SiT-L/2                   | Yes      | SatDINO-B                                   | 10    | Frederik   |                     |                  |
+| 13 | TBD                 | EuroSAT          | SiT-L/2                   | Yes      | SatDINO-B                                   | 12    | Frederik   |                     |                  |
+| 14 | TBD                 | EuroSAT          | SiT-L/2                   | Yes      | SatDINO-B                                   | 14    | Frederik   |                     |                  |
+| 15 | TBD                 | EuroSAT          | SiT-L/2                   | Yes      | SatDINO-B                                   | 16    | Frederik   |                     |                  |
 | | **Student size ablation** | | | | | | | |
-| 15 | TBD                 | EuroSAT          | SiT-S/2                   | Yes      | SatDINO-B                                   | 8     |            |                     |                  |
-| 16 | TBD                 | EuroSAT          | SiT-B/2                   | Yes      | SatDINO-B                                   | 8     |            |                     |                  |
-| 17 | TBD                 | EuroSAT          | SiT-XL/2                  | Yes      | SatDINO-B                                   | 8     |            |                     |                  ||
+| 16 | TBD                 | EuroSAT          | SiT-S/2                   | Yes      | SatDINO-B                                   | 8     |            |                     |                  |
+| 17 | TBD                 | EuroSAT          | SiT-B/2                   | Yes      | SatDINO-B                                   | 8     |            |                     |                  |
+| 18 | TBD                 | EuroSAT          | SiT-XL/2                  | Yes      | SatDINO-B                                   | 8     |            |                     |                  ||
 | | **REPA on multiple layers** | EuroSAT| SiT-L/2 (initialized from D=8 checkpoint) | Yes | SatDINO-B | depends | |
 
 
