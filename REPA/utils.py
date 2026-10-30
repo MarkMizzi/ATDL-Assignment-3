@@ -49,13 +49,18 @@ def fix_mocov3_state_dict(state_dict):
         )
     return state_dict
 
+SATDINO_MODEL_IDS = {
+    's': 'strakajk/satdino-vit_small-16',
+    'b': 'strakajk/satdino-vit_base-16',
+}
+
+
 class SatDINOEncoder(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, model_id):
         super().__init__()
         from huggingface_hub import hf_hub_download
         from transformers import AutoConfig, AutoModel
 
-        model_id = 'strakajk/satdino-vit_base-16'
         config = AutoConfig.from_pretrained(model_id, trust_remote_code=True)
         self.model = AutoModel.from_config(config, trust_remote_code=True)
         weights_path = hf_hub_download(model_id, filename='pytorch_model.bin')
@@ -89,9 +94,9 @@ def load_encoders(enc_type, device, resolution=256):
         architectures.append(architecture)
         encoder_types.append(encoder_type)
         if encoder_type == 'satdino':
-            if architecture != 'vit' or model_config != 'b':
-                raise ValueError("SatDINO supports --enc-type=satdino-vit-b")
-            encoder = SatDINOEncoder().to(device)
+            if architecture != 'vit' or model_config not in SATDINO_MODEL_IDS:
+                raise ValueError("SatDINO supports --enc-type=satdino-vit-s or satdino-vit-b")
+            encoder = SatDINOEncoder(SATDINO_MODEL_IDS[model_config]).to(device)
 
         elif encoder_type == 'mocov3':
             if architecture == 'vit':

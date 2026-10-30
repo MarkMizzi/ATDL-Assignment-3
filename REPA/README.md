@@ -137,6 +137,11 @@ Or align to both encoders with separate learned projectors:
 --enc-type=dinov2-vit-l,satdino-vit-b --resolution=256 --num-classes=10
 ```
 
+`satdino-vit-s` selects
+[`strakajk/satdino-vit_small-16`](https://huggingface.co/strakajk/satdino-vit_small-16)
+(384-wide tokens) and can be combined the same way, e.g.
+`--enc-type=satdino-vit-b,satdino-vit-s`.
+
 The existing loss averages the two alignment losses equally; `--proj-coeff`
 weights their combined contribution. SatDINO uses fMoW RGB normalization and
 256x256 inputs, producing 256 patch tokens of width 768 for SiT `/2` models.
@@ -165,7 +170,7 @@ variants must be preserved.
 To replace DINOv2 with SatDINO alone or change an existing encoder selection,
 add `--reset-projectors`. This initializes all alignment projectors afresh
 while retaining the pretrained SiT backbone. Do not use this flag when resuming
-the same run. Only SatDINO ViT-B/16 is supported.
+the same run. Only the SatDINO ViT-S/16 and ViT-B/16 encoders are supported.
 
 **[12/17/2024]**: We also support training on 512x512 resolution (ImageNet) and a text-to-image generation on MS-COCO.
 
