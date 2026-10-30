@@ -54,3 +54,7 @@ python extract_images_from_npz.py SiT-L-2-0400000-size-256-vae-ema-cfg-1.0-seed-
 
 
 TODO: pls fill this in last section Frederik as not sure what configs you had in mind
+
+## Requirements
+
+Whenever a directory has a `requirements.txt` file, this defines Python dependencies for scripts inside that directory and all subdirectories, except for those which themselves contain a `requirements.txt` file.
