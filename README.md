@@ -51,7 +51,7 @@ python extract_images_from_npz.py SiT-L-2-0400000-size-256-vae-ema-cfg-1.0-seed-
 | 15 | TBD                 | EuroSAT          | SiT-S/2                   | Yes      | SatDINO-B                                   | 8     |            |                     |                  |
 | 16 | TBD                 | EuroSAT          | SiT-B/2                   | Yes      | SatDINO-B                                   | 8     |            |                     |                  |
 | 17 | TBD                 | EuroSAT          | SiT-XL/2                  | Yes      | SatDINO-B                                   | 8     |            |                     |                  ||
-| | **REPA on multiple layers** | EuroSAT| SiT-L/2 (initialized from D=8 checkpoint( | Yes | SatDINO-B | depends | |
+| | **REPA on multiple layers** | EuroSAT| SiT-L/2 (initialized from D=8 checkpoint) | Yes | SatDINO-B | depends | |
 
 
 TODO: pls fill this in last section Frederik as not sure what configs you had in mind
