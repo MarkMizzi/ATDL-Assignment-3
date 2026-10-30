@@ -132,4 +132,35 @@
     --val-dir=/work/data/eurosat-splits/val \
     --checkpointing-steps=730
   ```
-    
+  
+- 28/10 Natasha. Added an option for LoRA finetuning instead of full finetuning. Example of calling it:
+
+```python
+  accelerate launch train.py   \
+    --report-to="wandb"        \
+    --allow-tf32               \
+    --mixed-precision="fp16"   \
+    --seed=0                   \
+    --path-type="linear"       \
+    --prediction="v"           \
+    --weighting="uniform"      \
+    --model="SiT-L/2"          \
+    --enc-type="satdino-vit-b"  \
+    --proj-coeff=0.5           \
+    --encoder-depth=8          \
+    --output-dir="exps"        \
+    --num-classes=10 \
+    --resolution=256 \
+    --exp-name=eurosat-finetune-lora-adaln-io-sit-l-2-satdino-b \
+    --pretrained-path=./0400000.pt \
+    --data-dir=/work/data/eurosat-splits/train \
+    --val-dir=/work/data/eurosat-splits/val \
+    --checkpointing-steps=730 \
+    --learning-rate=1e-4 \
+    --reset-projectors \
+    --lora-rank=16 \
+    --lora-targets=qkv,proj,fc1,fc2,adaLN_modulation \
+    --lora-train-io
+```
+
+- 28/10 Natasha. Added an option of using satdino-vit-b encoder
