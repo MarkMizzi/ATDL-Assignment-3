@@ -36,11 +36,11 @@ python extract_images_from_npz.py SiT-L-2-0400000-size-256-vae-ema-cfg-1.0-seed-
 | 4  | TBD                 | EuroSAT          | SiT-L/2                   | Yes      | DINOv2-L                                    | 8     | Mark       |                     |                  |
 | 5  | TBD                 | EuroSAT          | SiT-L/2                   | Yes      | DINOv2-g                                    | 8     | Mark       |                     |                  |
 | | **Base Models** | | | | | | | | |
-| 6  | TBD                 | EuroSAT          | SiT-L/2                   | Yes      | SatDINO-S                                   | 8     |            |                     |                  |
-| 7  | TBD                 | EuroSAT          | SiT-L/2                   | Yes      | SatDINO-B                                   | 8     |            |                     |                  |
+| 6  | TBD                 | EuroSAT          | SiT-L/2                   | Yes      | SatDINO-S                                   | 8     | Natasha    |                     |                  |
+| 7  | TBD                 | EuroSAT          | SiT-L/2                   | Yes      | SatDINO-B                                   | 8     | Natasha    |                     |                  |
 | | **LoRa fine-tuning** | | | | | | | | |
-| 8  | TBD                 | EuroSAT          | SiT-L/2 (LoRa fine-tuned) | Yes      | SatDINO-S                                   | 8     |            |                     |                  |
-| 9  | TBD                 | EuroSAT          | SiT-L/2 (LoRa fine-tuned) | Yes      | SatDINO-B                                   | 8     |            |                     |                  |
+| 8  | TBD                 | EuroSAT          | SiT-L/2 (LoRa fine-tuned) | Yes      | SatDINO-S                                   | 8     | Natasha    |                     |                  |
+| 9  | TBD                 | EuroSAT          | SiT-L/2 (LoRa fine-tuned) | Yes      | SatDINO-B                                   | 8     | Natasha    |                     |                  |
 | | **Depth ablation** | | | | | | | | |
 | 10 | TBD                 | EuroSAT          | SiT-L/2                   | Yes      | SatDINO-B                                   | 6     | Frederik   |                     |                  |
 | 11 | TBD                 | EuroSAT          | SiT-L/2                   | Yes      | SatDINO-B                                   | 10    | Frederik   |                     |                  |
