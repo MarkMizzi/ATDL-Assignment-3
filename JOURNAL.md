@@ -10,18 +10,18 @@
   ```
 
 - 23/10 Mark. Converted EuroSAT dataset to format used by REPA scripts using
-  ```python
+  ```bash
   python REPA/preprocessing/dataset_tools.py convert --source EuroSAT-data/EuroSAT/ --dest images --resolution 256x256 --transform=center-crop-dhariwal
   ```
 
 - 23/10 Mark. Generated EuroSAT latents on UCloud server using
-  ```python
+  ```bash
   python REPA/preprocessing/dataset_tools.py encode --source=images --dest=vae-sd
   ```
   Version of REPA code used is latest of personal fork.
 
 - 24/10 Natasha. Implemented the split of EuroSAT dataset into train/validation/test in the proportion 70/15/15. The script for splitting the data has been called as
-  ```python
+  ```bash
   python preprocessing/split_eurosat.py --source=/work/data --dest=/work/data/eurosat-splits
   ```
 ## Training
@@ -30,7 +30,7 @@
     and validation datasets, and the generated example pictures are saved to WandB more often. The plan is to do the following 4 training schemes (note that --reset-projectors is ONLY used when switching from one alignment encoder to another one!):
 
   finetune with DINO:
-  ```python
+  ```bash
   accelerate launch train.py   \
     --report-to="wandb"        \
     --allow-tf32               \
@@ -56,7 +56,7 @@
 
   finetune with SatDINO:
 
-  ```python
+  ```bash
   accelerate launch train.py   \
     --report-to="wandb"        \
     --allow-tf32               \
@@ -83,7 +83,7 @@
 
   finetune with DINO+SatDINO
 
-  ```python
+  ```bash
   accelerate launch train.py   \
     --report-to="wandb"        \
     --allow-tf32               \
@@ -109,7 +109,7 @@
 
   finetune with none:
 
-  ```python
+  ```bash
   accelerate launch train.py   \
     --report-to="wandb"        \
     --allow-tf32               \
@@ -135,7 +135,7 @@
   
 - 28/10 Natasha. Added an option for LoRA finetuning instead of full finetuning. Example of calling it:
 
-```python
+```bash
   accelerate launch train.py   \
     --report-to="wandb"        \
     --allow-tf32               \
