@@ -1,23 +1,18 @@
-"""Fréchet distance, precision and recall between real and generated images in SatDINO CLS-feature space.
+"""Fréchet distance, precision and recall between real and generated images in a frozen encoder's feature space.
 
 Precision/recall follow Kynkäänniemi et al. (2019) with k=3, as in the ADM evaluator.
 
 Usage:
-    python fd_satdino.py eurosat_test_ref.npz samples/a.npz [samples/b.npz ...] --model b
+    python fd_satdino.py eurosat_test_ref.npz samples/a.npz [samples/b.npz ...] --encoder ssl4eo-moco
 """
 import argparse
 
 import numpy as np
 import torch
 from scipy import linalg
-from torchvision.transforms import Normalize
 from tqdm import tqdm
 
-from utils import SATDINO_MODEL_IDS, SatDINOEncoder
-
-# fMoW RGB statistics, identical to train.py's SatDINO preprocessing.
-SATDINO_DEFAULT_MEAN = (0.433, 0.436, 0.407)
-SATDINO_DEFAULT_STD = (0.198, 0.193, 0.195)
+from eval_encoders import ENCODERS, load_encoder
 
 
 def load_images(path):
@@ -29,12 +24,10 @@ def load_images(path):
 
 @torch.no_grad()
 def extract_features(encoder, images, batch_size, device):
-    normalize = Normalize(SATDINO_DEFAULT_MEAN, SATDINO_DEFAULT_STD)
     features = []
     for start in tqdm(range(0, len(images), batch_size), leave=False):
         batch = torch.from_numpy(images[start:start + batch_size]).to(device)
-        batch = normalize(batch.permute(0, 3, 1, 2).float() / 255.)
-        features.append(encoder.model(batch).double().cpu())  # CLS token
+        features.append(encoder(batch).double().cpu())
     return torch.cat(features).numpy()
 
 
@@ -81,7 +74,7 @@ def precision_recall(ref_feats, sample_feats, k, device):
 
 def main(args):
     device = torch.device(args.device)
-    encoder = SatDINOEncoder(SATDINO_MODEL_IDS[args.model]).to(device)
+    encoder = load_encoder(args.encoder, device)
 
     ref_feats = extract_features(encoder, load_images(args.ref), args.batch_size, device)
     print(f"Reference: {args.ref} ({len(ref_feats)} images)")
@@ -89,16 +82,15 @@ def main(args):
         sample_feats = extract_features(encoder, load_images(sample_path), args.batch_size, device)
         fd = frechet_distance(ref_feats, sample_feats)
         precision, recall = precision_recall(ref_feats, sample_feats, args.k, device)
-        name = f"SatDINO-{args.model.upper()}"
         print(f"{sample_path} ({len(sample_feats)} images)")
-        print(f"  FD-{name}: {fd:.4f}  Precision: {precision:.4f}  Recall: {recall:.4f}")
+        print(f"  FD-{args.encoder}: {fd:.4f}  Precision: {precision:.4f}  Recall: {recall:.4f}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("ref", help="Reference .npz of real images (arr_0, uint8 NHWC).")
     parser.add_argument("samples", nargs="+", help="One or more generated .npz files.")
-    parser.add_argument("--model", choices=sorted(SATDINO_MODEL_IDS), default="b", help="SatDINO ViT size.")
+    parser.add_argument("--encoder", choices=ENCODERS, default="satdino-b", help="Frozen feature extractor.")
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--k", type=int, default=3, help="Nearest-neighbour count for precision/recall manifolds.")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")

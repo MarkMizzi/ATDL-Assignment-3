@@ -1,4 +1,4 @@
-"""Nearest-neighbour memorization check in SatDINO CLS-feature space.
+"""Nearest-neighbour memorization check in a frozen encoder's feature space (SSCD by default).
 
 Each generated image is matched to its nearest training image (cosine distance).
 Held-out test images, which cannot be memorized, give the baseline distribution:
@@ -7,7 +7,7 @@ is flagged. Without memorization the flagged fraction is about --percentile %.
 
 Usage:
     python memorization_satdino.py --train-dir /data/eurosat-splits/train/images \
-        --ref /data/eurosat_test_ref.npz samples/a.npz [samples/b.npz ...] --model b
+        --ref /data/eurosat_test_ref.npz samples/a.npz [samples/b.npz ...] --encoder sscd
 """
 import argparse
 import os
@@ -18,8 +18,8 @@ import torch.nn.functional as F
 from PIL import Image
 from tqdm import tqdm
 
+from eval_encoders import ENCODERS, load_encoder
 from fd_satdino import extract_features, load_images
-from utils import SATDINO_MODEL_IDS, SatDINOEncoder
 
 IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.tif', '.tiff')
 
@@ -69,7 +69,7 @@ def save_pairs(path, samples, sample_idx, train_paths, train_idx, size=128):
 
 def main(args):
     device = torch.device(args.device)
-    encoder = SatDINOEncoder(SATDINO_MODEL_IDS[args.model]).to(device)
+    encoder = load_encoder(args.encoder, device)
 
     train_paths = list_images(args.train_dir)
     train_feats = directory_features(encoder, train_paths, args.batch_size, device)
@@ -102,7 +102,7 @@ if __name__ == "__main__":
     parser.add_argument("samples", nargs="+", help="One or more generated .npz files.")
     parser.add_argument("--train-dir", required=True, help="Directory of training images (searched recursively).")
     parser.add_argument("--ref", required=True, help="Held-out real images .npz (e.g. EuroSAT test split).")
-    parser.add_argument("--model", choices=sorted(SATDINO_MODEL_IDS), default="b", help="SatDINO ViT size.")
+    parser.add_argument("--encoder", choices=ENCODERS, default="sscd", help="Frozen feature extractor.")
     parser.add_argument("--percentile", type=float, default=1.0, help="Test-distance percentile used as threshold.")
     parser.add_argument("--num-pairs", type=int, default=16, help="Closest generated/training pairs to save.")
     parser.add_argument("--batch-size", type=int, default=64)
