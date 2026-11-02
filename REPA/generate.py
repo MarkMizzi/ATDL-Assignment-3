@@ -65,7 +65,7 @@ def main(args):
         input_size=latent_size,
         num_classes=args.num_classes,
         use_cfg = True,
-        z_dims = [int(z_dim) for z_dim in args.projector_embed_dims.split(',')],
+        z_dims = [int(z_dim) for z_dim in args.projector_embed_dims.split(',') if z_dim.strip() != ""],
         encoder_depth=args.encoder_depth,
         **block_kwargs,
     ).to(device)
