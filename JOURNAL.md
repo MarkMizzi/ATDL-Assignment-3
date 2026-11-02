@@ -184,3 +184,21 @@ torchrun \
   --num-classes=10                                                           \
   --sample-dir=exps/eurosat-from-scratch-dinov2-b-sit-l-2/
 ```
+
+- 2/11 Mark. To generate images for models trained without REPA:
+
+```bash
+torchrun \
+  --nnodes=1          \
+  --nproc_per_node=1  \
+  generate.py         \
+  --model SiT-L/2     \
+  --num-fid-samples 4000 \
+  --ckpt exps/eurosat-from-scratch-norepa-sit-l-2/checkpoints/0060590.pt   \
+  --mode sde          \
+  --cfg-scale=1       \
+  --projector-embed-dims=''    \
+  --num-steps=250     \
+  --num-classes=10    \
+  --sample-dir=exps/eurosat-from-scratch-norepa-sit-l-2/
+```
