@@ -34,7 +34,7 @@ def main(args):
 
     # Euclidian metric means that the metric used to evaluate distance in NN is per-pixel MSE.
     # There are other options for measuring overfitting
-    nbrs = NearestNeighbors(n_neighbors=1, metric="euclidian").fit(train_set)
+    nbrs = NearestNeighbors(n_neighbors=1, metric="l2").fit(train_set)
     distances, _ = nn.kneighbors(output_set)
 
     print(f"Per-Pixel MSE 1-NN:")
