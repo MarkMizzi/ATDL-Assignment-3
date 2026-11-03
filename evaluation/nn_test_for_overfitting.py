@@ -4,19 +4,22 @@ import argparse
 from glob import glob
 from typing import Iterable
 import os
+from functools import reduce
 
 import numpy as np
 from PIL import Image
 from sklearn.neighbors import NearestNeighbors
 
 def samples_to_tensor(samples: Iterable[Image]):
-    return np.stack(
+    out = np.stack(
         [
             np.array(s.convert("RGB"))
             for s in samples
         ],
         axis=0
     )
+    shape = (out.shape[0], reduce(lambda x, y: x * y, out.shape[1:]))
+    return out.reshape(shape)
 
 def main(args):
     # We use ** because training samples are in nested dirs to indicate class.
