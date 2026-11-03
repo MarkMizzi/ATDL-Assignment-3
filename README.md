@@ -12,7 +12,7 @@ Artifacts such as trained models and images generated for evaluation are availab
 ├── models
 |   └── linear-sit-l-2-<enc-type>-enc<enc-depth>
 |       ├── checkpoints                              
-|       |   ├── 0400000.pt                           # Final training checkpoint, containing trained model + optimizer state
+|       |   ├── 0060590.pt                           # Final training checkpoint, containing trained model + optimizer state
 |       |   └── <other-checkpoint>.pt
 |       └── samples                                  # Samples generated for evaluation
 |           ├── SiT-L-2-0400000-size-256-vae-ema-cfg-1.0-seed-0-sde.npz             # Compressed archive of evaluation samples
@@ -60,6 +60,3 @@ python extract_images_from_npz.py SiT-L-2-0400000-size-256-vae-ema-cfg-1.0-seed-
 
 TODO: pls fill this in last section Frederik as not sure what configs you had in mind
 
-## Requirements
-
-Whenever a directory has a `requirements.txt` file, this defines Python dependencies for scripts inside that directory and all subdirectories, except for those which themselves contain a `requirements.txt` file.
