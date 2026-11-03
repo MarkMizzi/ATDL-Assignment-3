@@ -46,3 +46,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--sample-dir", type=str, default="samples")
     parser.add_argument("--train-dir", type=str, required=True)
+
+    args = parser.parse_args()
+    main(args)
