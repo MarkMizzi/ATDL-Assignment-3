@@ -19,7 +19,9 @@ def samples_to_tensor(samples: Iterable[Image]):
         axis=0
     )
     shape = (out.shape[0], reduce(lambda x, y: x * y, out.shape[1:]))
-    return out.reshape(shape)
+    out = out.reshape(shape)
+    # normalize to [0,1] for more interpretable results
+    return out.astype(dtype=np.float32)/255.0
 
 def main(args):
     # We use ** because training samples are in nested dirs to indicate class.
@@ -38,7 +40,7 @@ def main(args):
     # Euclidian metric means that the metric used to evaluate distance in NN is per-pixel MSE.
     # There are other options for measuring overfitting
     nbrs = NearestNeighbors(n_neighbors=1, metric="l2").fit(train_set)
-    distances, _ = nn.kneighbors(output_set)
+    distances, _ = nbrs.kneighbors(output_set)
 
     print(f"Per-Pixel MSE 1-NN:")
     print(f"\tAverage distance: {np.mean(distances)}")
