@@ -87,8 +87,6 @@ def main(args):
         real_path = real_paths[nearest[closest]]
         pair_path = os.path.join(sample_parent, f"{sample_name}_closest_pair_{name}.png")
         save_pair(generated_path, real_path, pair_path)
-        print(f"Closest pair (generated | {name}), L2 distance {distances[closest]}:")
-        print(f"\t{generated_path}\n\t{real_path}\n\tSaved: {pair_path}\n")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
