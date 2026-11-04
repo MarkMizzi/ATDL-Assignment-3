@@ -43,9 +43,6 @@ def nearest_distances(queries, keys, device, chunk=1024):
     return best.numpy(), best_idx.numpy()
 
 
-PAIR_FILES = {"train": "closest_pair_train.png", "test": "closest_pair_test.png"}
-
-
 def print_stats(name, distances, dim, resolution):
     print(f"Generated -> {name}: pixel L2 1-NN distance ([0,1] pixels, {resolution}):")
     print(f"\tAverage distance: {np.mean(distances)}")
@@ -70,14 +67,12 @@ def save_pair(generated_path, real_path, out_path):
 
 
 def main(args):
-    # Saved pair images live in the sample dir, so they must not be read back as samples.
-    output_sample_paths = [
-        p for p in glob(os.path.join(args.sample_dir, "*.png"))
-        if os.path.basename(p) not in PAIR_FILES.values()
-    ]
+    output_sample_paths = glob(os.path.join(args.sample_dir, "*.png"))
     output_set = load_images(output_sample_paths, args.resize, args.workers)
     resolution = f"{args.resize}x{args.resize}" if args.resize else "native resolution"
     device = torch.device(args.device)
+    sample_dir = os.path.normpath(args.sample_dir)
+    sample_parent, sample_name = os.path.dirname(sample_dir), os.path.basename(sample_dir)
 
     for name, real_dir in (("train", args.train_dir), ("test", args.test_dir)):
         # We use ** because real images are in nested dirs to indicate class.
@@ -89,9 +84,11 @@ def main(args):
         closest = int(np.argmin(distances))
         generated_path = output_sample_paths[closest]
         real_path = real_paths[nearest[closest]]
-        pair_path = os.path.join(args.sample_dir, PAIR_FILES[name])
+        # The batched distances can round tiny values to 0; recompute this one pair exactly.
+        exact = torch.dist(output_set[closest].double(), real_set[nearest[closest]].double()).item() / 255.0
+        pair_path = os.path.join(sample_parent, f"{sample_name}_closest_pair_{name}.png")
         save_pair(generated_path, real_path, pair_path)
-        print(f"Closest pair (generated | {name}):")
+        print(f"Closest pair (generated | {name}), exact L2 distance {exact}:")
         print(f"\t{generated_path}\n\t{real_path}\n\tSaved: {pair_path}\n")
 
 if __name__ == "__main__":
