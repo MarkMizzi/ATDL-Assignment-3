@@ -21,11 +21,13 @@
 | 10 | 52560        | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L | Yes   | SatDINO-s         | 8     | Natasha | 18.797160340873802 | 49.272870074258435 | 3.562255382537842   | 0.71225   | 0.5130864197530864  |
 | 11 | 60590        | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L | Yes   | DINOv2-L + SatDINO-b | 8  | Natasha | 18.824982514980547 | 49.25133713051969  | 3.6046314239501953  | 0.72      | 0.5214814814814814  |
 | 11 | 50370        | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L | Yes   | DINOv2-L + SatDINO-b | 8  | Natasha | 18.54439405343328  | 49.21815290751101  | 3.6572911739349365  | 0.705     | 0.5269135802469136  |
+| 12 | 60590        | EuroSAT | SiT-L/2 | From Scratch                 | Yes   | SatDINO-b         | 8     | Natasha | 70.35061153170875  | 71.59246996203831  | 3.0716867446899414 | 0.528     | 0.1362962962962963  |
+| 12 | 30660        | EuroSAT | SiT-L/2 | From Scratch                 | Yes   | SatDINO-b         | 8     | Natasha | 107.11349886252123 | 97.71336316800813  | 2.766411781311035  | 0.38725   | 0.03925925925925926 |
 |   | **LoRa finetuning** |   |         |                              |       |                   |       |         |                    |                    |                    |           |                     |
-| 12 | 60590         | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L (LoRA) | Yes   | SatDINO-b         | 8     | Natasha | 18.984920965749325 | 49.46311911436476  | 3.6067888736724854  | 0.7015    | 0.5306172839506172  |
-| 12 | 70080         | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L (LoRA) | Yes   | SatDINO-b         | 8     | Natasha | 19.2322864290162   | 49.529578426702756 | 3.575568675994873   | 0.71275   | 0.5160493827160494  |
-| 13 | 60590        | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L (LoRA) | Yes   | SatDINO-s         | 8     | Natasha | 18.966548800812802 | 49.4533929082188   | 3.6146390438079834  | 0.7055    | 0.5209876543209877  |
-| 13 | 64240        | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L (LoRA) | Yes   | SatDINO-s         | 8     | Natasha | 19.091244683107504 | 49.494668038064106 | 3.616442918777466   | 0.702     | 0.5202469135802469  |
+| 13 | 60590         | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L (LoRA) | Yes   | SatDINO-b         | 8     | Natasha | 18.984920965749325 | 49.46311911436476  | 3.6067888736724854  | 0.7015    | 0.5306172839506172  |
+| 13 | 70080         | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L (LoRA) | Yes   | SatDINO-b         | 8     | Natasha | 19.2322864290162   | 49.529578426702756 | 3.575568675994873   | 0.71275   | 0.5160493827160494  |
+| 14 | 60590        | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L (LoRA) | Yes   | SatDINO-s         | 8     | Natasha | 18.966548800812802 | 49.4533929082188   | 3.6146390438079834  | 0.7055    | 0.5209876543209877  |
+| 14 | 64240        | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L (LoRA) | Yes   | SatDINO-s         | 8     | Natasha | 19.091244683107504 | 49.494668038064106 | 3.616442918777466   | 0.702     | 0.5202469135802469  |
 
 ## Notes
 
