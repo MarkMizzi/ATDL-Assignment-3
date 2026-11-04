@@ -26,14 +26,15 @@ def load_images(paths, size, workers):
 @torch.no_grad()
 def nearest_distances(queries, keys, device, chunk=1024):
     keys = keys.to(device)
-    best = torch.empty(len(queries))
+    best = torch.empty(len(queries), dtype=torch.float64)
     best_idx = torch.empty(len(queries), dtype=torch.long)
     for q0 in range(0, len(queries), chunk):
-        q = queries[q0:q0 + chunk].to(device).float() / 255.0
-        q_best = torch.full((len(q),), float("inf"), device=device)
+        # float64: cdist's float32 rounding can reorder or zero the smallest distances.
+        q = queries[q0:q0 + chunk].to(device).double() / 255.0
+        q_best = torch.full((len(q),), float("inf"), dtype=torch.float64, device=device)
         q_idx = torch.zeros(len(q), dtype=torch.long, device=device)
         for k0 in range(0, len(keys), chunk):
-            k = keys[k0:k0 + chunk].float() / 255.0
+            k = keys[k0:k0 + chunk].double() / 255.0
             d, i = torch.cdist(q, k).min(dim=1)
             closer = d < q_best
             q_best = torch.where(closer, d, q_best)
@@ -84,11 +85,9 @@ def main(args):
         closest = int(np.argmin(distances))
         generated_path = output_sample_paths[closest]
         real_path = real_paths[nearest[closest]]
-        # The batched distances can round tiny values to 0; recompute this one pair exactly.
-        exact = torch.dist(output_set[closest].double(), real_set[nearest[closest]].double()).item() / 255.0
         pair_path = os.path.join(sample_parent, f"{sample_name}_closest_pair_{name}.png")
         save_pair(generated_path, real_path, pair_path)
-        print(f"Closest pair (generated | {name}), exact L2 distance {exact}:")
+        print(f"Closest pair (generated | {name}), L2 distance {distances[closest]}:")
         print(f"\t{generated_path}\n\t{real_path}\n\tSaved: {pair_path}\n")
 
 if __name__ == "__main__":
