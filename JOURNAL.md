@@ -202,3 +202,14 @@ torchrun \
   --num-classes=10    \
   --sample-dir=exps/eurosat-from-scratch-norepa-sit-l-2/
 ```
+
+## Evaluation
+
+04/11 Natasha. Made a faster version of nn_test_for_overfitting. It can be called as e.g.:
+
+```bash
+python nn_test_for_overfitting_fast.py \
+  --train-dir ../../eurosat-splits/train/images \
+  --test-dir ../../eurosat-splits/test/images \
+  --sample-dir ../REPA/samples/eurosat-finetune-lora-adaln-io-sit-l-2-satdino-b/SiT-L-2-0070080-size-256-vae-ema-cfg-1.0-seed-0-sde
+```
