@@ -205,7 +205,7 @@ torchrun \
 
 ## Evaluation
 
-- 04/11 Natasha. Made a faster version of nn_test_for_overfitting. It can be called as e.g.:
+- 04/11 Natasha. Made a faster version of nn_test_for_overfitting that is computing per-pixel differences. It also compares generated pictures both to train and test ones. It can be called as e.g.:
 
 ```bash
 python nn_test_for_overfitting_fast.py \
@@ -214,7 +214,7 @@ python nn_test_for_overfitting_fast.py \
   --sample-dir ../REPA/samples/eurosat-finetune-lora-adaln-io-sit-l-2-satdino-b/SiT-L-2-0070080-size-256-vae-ema-cfg-1.0-seed-0-sde
 ```
 
-- 04/11 Natasha. Made a memorization check based on encoded features rather than pixel values. It can be called as e.g.:
+- 04/11 Natasha. Made a memorization check based on encoded features (by SSCD by default: Meta's copy-detection model) rather than pixel values. It can be called as e.g.:
 
  ```bash
 PYTHONPATH=. python ../evaluation/memorization_satdino.py \
@@ -223,7 +223,7 @@ PYTHONPATH=. python ../evaluation/memorization_satdino.py \
   samples/eurosat-finetune-lora-adaln-io-sit-l-2-satdino-b/SiT-L-2-0060590-size-256-vae-ema-cfg-1.0-seed-0-sde.npz
 ```
 
-- 04/11 Natasha. Made a script to compute Frechet distance using different features (satdino or ssl4eo-moco instead o Inception). It can be called as e.g.
+- 04/11 Natasha. Made a script to compute Frechet distance using different features than evaluator.py (satdino or ssl4eo-moco instead of Inception features). It can be called as e.g.
 
 ```bash
 PYTHONPATH=. python ../evaluation/fd_satdino.py \
