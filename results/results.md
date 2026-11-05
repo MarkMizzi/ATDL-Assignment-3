@@ -51,6 +51,27 @@ L2 distance from each generated sample to its nearest real image, pixels in [0, 
 | 14 | 60590               | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L (LoRA) | Yes   | SatDINO-s            | 8     | Natasha | 30.571846245867338 | 27.065623895805587 | 2.020890511815181  | 111.05273516879843 | 31.677265737190528 | 27.948488064060435 | 2.1465743923318534 | 115.9381510599782  | 0.00%         |
 | 14 | 64240               | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L (LoRA) | Yes   | SatDINO-s            | 8     | Natasha | 30.55073112932116  | 27.039206647662922 | 1.9937773244743837 | 111.15718136779283 | 31.6552922651769   | 27.844574596440253 | 2.0221761700290806 | 116.13766751672173 | 0.00%         |
 
+## Fréchet distance, precision and recall in domain-specific feature spaces
+
+Generated samples vs. EuroSAT test images (`evaluation/fd_satdino.py`): SatDINO-B CLS features and SSL4EO-S12 MoCo ResNet-50 (Sentinel-2 RGB) pooled features; k=3 for precision/recall. SatDINO-B may favour runs aligned to SatDINO; SSL4EO-MoCo was not used in any training run.
+
+|    | Train Its.          | Dataset | Model   | From Scratch/Pre-trained            | REPA? | REPA Target Repr.    | Depth | By who? | FD-SatDINO-B | Precision (SatDINO-B) | Recall (SatDINO-B) | FD-SSL4EO-MoCo | Precision (SSL4EO-MoCo) | Recall (SSL4EO-MoCo) |
+|----|---------------------|---------|---------|-------------------------------------|-------|----------------------|-------|---------|--------------|-----------------------|--------------------|----------------|-------------------------|----------------------|
+|    | **Base Models**     |         |         |                                     |       |                      |       |         |              |                       |                    |                |                         |                      |
+| 9  | 60590               | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L        | Yes   | SatDINO-b            | 8     | Natasha | 66.8177      | 0.5797                | 0.5499             | 0.2515         | 0.4688                  | 0.4331               |
+| 9  | 51830               | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L        | Yes   | SatDINO-b            | 8     | Natasha | 66.5786      | 0.5565                | 0.5649             | 0.2513         | 0.4622                  | 0.4560               |
+| 10 | 60590               | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L        | Yes   | SatDINO-s            | 8     | Natasha | 67.0842      | 0.5700                | 0.5588             | 0.2507         | 0.4645                  | 0.4588               |
+| 10 | 52560               | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L        | Yes   | SatDINO-s            | 8     | Natasha | 66.5686      | 0.5583                | 0.5593             | 0.2507         | 0.4703                  | 0.4393               |
+| 11 | 60590               | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L        | Yes   | DINOv2-L + SatDINO-b | 8     | Natasha | 67.1044      | 0.5813                | 0.5526             | 0.2543         | 0.4738                  | 0.4459               |
+| 11 | 50370               | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L        | Yes   | DINOv2-L + SatDINO-b | 8     | Natasha | 66.7703      | 0.5613                | 0.5704             | 0.2554         | 0.4680                  | 0.4511               |
+| 12 | 60590               | EuroSAT | SiT-L/2 | From Scratch                        | Yes   | SatDINO-b            | 8     | Natasha | 252.1118     | 0.5400                | 0.0881             | 0.4865         | 0.4775                  | 0.1595               |
+| 12 | 30660               | EuroSAT | SiT-L/2 | From Scratch                        | Yes   | SatDINO-b            | 8     | Natasha | 462.1068     | 0.3693                | 0.0230             | 0.6955         | 0.3960                  | 0.0847               |
+|    | **LoRa finetuning** |         |         |                                     |       |                      |       |         |              |                       |                    |                |                         |                      |
+| 13 | 60590               | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L (LoRA) | Yes   | SatDINO-b            | 8     | Natasha | 66.6617      | 0.5617                | 0.5709             | 0.2529         | 0.4785                  | 0.4383               |
+| 13 | 70080               | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L (LoRA) | Yes   | SatDINO-b            | 8     | Natasha | 66.9368      | 0.5795                | 0.5580             | 0.2520         | 0.4733                  | 0.4277               |
+| 14 | 60590               | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L (LoRA) | Yes   | SatDINO-s            | 8     | Natasha | 66.7081      | 0.5723                | 0.5632             | 0.2531         | 0.4585                  | 0.4637               |
+| 14 | 64240               | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L (LoRA) | Yes   | SatDINO-s            | 8     | Natasha | 66.7269      | 0.5783                | 0.5615             | 0.2525         | 0.4620                  | 0.4533               |
+
 ## Notes
 
 - NN distance is calculated based on per-pixel MSE metric and relative to training dataset, tests whether model is memorizing
