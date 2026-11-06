@@ -52,9 +52,9 @@ python extract_images_from_npz.py SiT-L-2-0400000-size-256-vae-ema-cfg-1.0-seed-
 | 14 | TBD                 | EuroSAT          | SiT-L/2                   | Pre-trained                  | Yes      | SatDINO-B                                   | 14    | Frederik   |
 | 15 | TBD                 | EuroSAT          | SiT-L/2                   | Pre-trained                  | Yes      | SatDINO-B                                   | 16    | Frederik   |
 | | **Student size ablation** | | | | | |
-| 16 | TBD                 | EuroSAT          | SiT-S/2                   | Pre-trained                  | Yes      | SatDINO-B                                   | 8     |            |
-| 17 | TBD                 | EuroSAT          | SiT-B/2                   | Pre-trained                  | Yes      | SatDINO-B                                   | 8     |            |
-| 18 | TBD                 | EuroSAT          | SiT-XL/2                  | Pre-trained                  | Yes      | SatDINO-B                                   | 8     |            |
+| 16 | TBD                 | EuroSAT          | SiT-S/2                   | Pre-trained                  | Yes      | SatDINO-B                                   | 8     | Ondrej     |
+| 17 | TBD                 | EuroSAT          | SiT-B/2                   | Pre-trained                  | Yes      | SatDINO-B                                   | 8     | Ondrej     |
+| 18 | TBD                 | EuroSAT          | SiT-XL/2                  | Pre-trained                  | Yes      | SatDINO-B                                   | 8     | Ondrej     |
 | | **REPA on multiple layers** | EuroSAT| SiT-L/2 (initialized from D=8 checkpoint) | Yes | SatDINO-B | depends | |
 
 
