@@ -15,12 +15,13 @@ Artifacts such as trained models and images generated for evaluation are availab
 |       |   ├── 0060590.pt                           # Final training checkpoint, containing trained model + optimizer state
 |       |   └── <other-checkpoint>.pt
 |       └── samples                                  # Samples generated for evaluation
-|           ├── SiT-L-2-0400000-size-256-vae-ema-cfg-1.0-seed-0-sde.npz             # Compressed archive of evaluation samples
-|           └── SiT-L-2-<other-checkpoint>-size-256-vae-ema-cfg-1.0-seed-0-sde.npz  # Same as above but for checkpoint ≠ 400K
-└── VIRTUAL_imagenet256_labeled.npz                  # Reference latent for ImageNet 256x256
+|       |   ├── SiT-L-2-0060590-size-256-vae-ema-cfg-1.0-seed-0-sde.npz             # Compressed archive of evaluation samples
+|       |   └── SiT-L-2-0060590-size-256-vae-ema-cfg-1.0-seed-0-sde/                # Evaluation samples
+|       └── samples-<other-checkpoint>               # Same as above but for checkpoint ≠ 60K
+└── eurosat_test_ref.npz                             # Reference latent for test set sampled from EuroSAT
 ```
 
-The images generated for evaluation can be extracted from the `.npz` archives using the [./extract_images_from_npz.py](./extract_images_from_npz.py), e.g.
+The images generated for evaluation can also be extracted from the `.npz` archives using the [./extract_images_from_npz.py](./extract_images_from_npz.py), e.g.
 ```bash
 python extract_images_from_npz.py SiT-L-2-0400000-size-256-vae-ema-cfg-1.0-seed-0-sde.npz outdir
 ```
