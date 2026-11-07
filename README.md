@@ -1,5 +1,15 @@
 # ATDL Assignment 3
 
+This repository contains the source code for the hand-in of Advanced Topics in Deep Learning (ATDL) Assignment 3. The repo is structured as follows:
+```text
+├── REPA/                              # Copy of REPA source code with our custom modifications
+├── evaluation/                        # Custom evaluation scripts with our own evaluation metrics
+├── guided-diffusion/                  # Submodule containing code adapted from the OpenAI diffusion evaluation suite. Used to collect some of the evaluation metrics reported.
+└── guided-diffusion-requirements.txt  # Requirements file for the code in guided-diffusion/
+```
+
+The code for REPA was copied from [commit `67f7145` of the original repository](github.com/sihyun-yu/REPA/tree/67f714503e3892f993844aab088ffc5791c92613) and adapted for our experiments and trained models.
+
 ## Sharing Data and Models
 
 Since the project required sharing data and models which are larger than what is feasible (or good practice) to store on GitHub, we used [this link here](https://sharepoint.markmizzi.com/atdl-assignment-3) as a sharepoint, which hosts the files on Mark's personal storage server. The access password for this share is `MnmDYnS@a!eDt878`.
