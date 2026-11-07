@@ -176,11 +176,20 @@ python nn_test_for_overfitting_fast.py \
 ```
 where `--train-dir`, `--test-dir` and `--sample-dir` should point to the directories containing the training, test and generated samples respectively.
 
-Another of the scripts can computer Frechet distance using features from encoders other than Inception (e.g. `satdino` or `ssl4eo-moco`. It can be run using a command like
+Another of the scripts can compute Frechet distance using features from encoders other than Inception (e.g. `satdino` or `ssl4eo-moco`. It can be run using a command like
 ```bash
 PYTHONPATH=. python ../evaluation/fd_satdino.py \
   eurosat_test_ref.npz \
   samples/eurosat-finetune-lora-adaln-io-sit-l-2-satdino-b/SiT-L-2-0060590-size-256-vae-ema-cfg-1.0-seed-0-sde.npz \
   --encoder satdino-b
 ```
-where `--encoder` is the encoder whose features are used to compute Frechet distance, and can be set to either `satdino-b` or `ssl4eo-moco`.
+where `--encoder` is the encoder whose features are used to compute Frechet distance, and can be set to either `satdino-b` or `ssl4eo-moco`. Note that the script must be run from the `REPA` subdirectory as it uses the `utils.py` file in that directory.
+
+The last of our scripts computes another memorization check based on encoded features (from SSCD by default; this is Meta's copy-detection model), and can be run using a command like
+```bash
+PYTHONPATH=. python ../evaluation/memorization_satdino.py \
+ --train-dir ../../eurosat-splits/train/images \
+ --ref eurosat_test_ref.npz \
+ samples/eurosat-finetune-lora-adaln-io-sit-l-2-satdino-b/SiT-L-2-0060590-size-256-vae-ema-cfg-1.0-seed-0-sde.npz
+```
+Note that once again the script must be run from the `REPA` subdirectory as it uses the `utils.py` file in that directory.
