@@ -66,3 +66,48 @@ python extract_images_from_npz.py SiT-L-2-0400000-size-256-vae-ema-cfg-1.0-seed-
 | 23 | 60590                       | EuroSAT          | SiT-L/2                   | Pre-trained                  | Yes (Multi-layer) | SatDINO-B                                   | Sₐₗₗ → Tₘₑₐₙ  | Frederik |
 | 24 | 60590                       | EuroSAT          | SiT-L/2                   | Pre-trained                  | Yes (Multi-layer) | SatDINO-B                                   | Sₘₑₐₙ → Tₘₑₐₙ | Frederik |
 
+## Training
+
+The training process is similar to the original REPA source code. You will need to set up and activate a Python virtual environment with all the dependencies in [`REPA/requirements.txt`](./REPA/requirements.txt).
+
+### Using DINOv2 as target representation
+
+REPA training with a DINOv2 model as the target representation can be achieved using a command like
+```
+accelerate launch train.py   \
+  --report-to="wandb"        \
+  --allow-tf32               \
+  --mixed-precision="fp16"   \
+  --seed=0                   \
+  --path-type="linear"       \
+  --prediction="v"           \
+  --weighting="uniform"      \
+  --model="SiT-L/2"          \
+  --enc-type="dinov2-vit-l"  \
+  --proj-coeff=0.5           \
+  --encoder-depth=8          \
+  --output-dir="exps"        \
+  --num-classes=10 \
+  --resolution=256 \
+  --exp-name=eurosat-dino-sit-l-2 \
+  --learning-rate=1e-5 \
+  --data-dir=/work/data/eurosat-splits/train \
+  --val-dir=/work/data/eurosat-splits/val \
+  --checkpointing-steps=730
+```
+
+In this case the chosen target representation is DINOv2-L (set in `--enc-type`), the model being trained has a SiT-L/2 architecture (set in `--model`) and the training/validation dirs are in `/work/data/eurosat-splits/{train,val}` (set in `--data-dir` and `--val-dir` respectively).
+
+### Using SatDINO as target representation
+
+REPA training with a SatDINO model as the target representation can be achieved using a command similar to the one shown above, but setting `--enc-type=satdino-vit-b` or `--enc-type=satdino-vit-s`.
+
+### Using SatDINO+DINO as target representation
+
+REPA training with SatDINO and a DINOv2 model simultaneously used as the target representation can be achieved using a command similar to the one shown above, but setting `--enc-type=dinov2-vit-l,satdino-vit-b` (or similar).
+
+### Fine tuning
+
+To fine tune a pre-trained checkpoint, any of the commands above can be used with the additional flag `--pretrained-path=<path-to-checkpoint>` where `<path-to-checkpoint>` is a path to the pre-trained checkpoint produced using REPA training scripts (checkpoints produced by the original REPA code are compatible).
+
+## Evaluation
