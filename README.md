@@ -63,6 +63,6 @@ python extract_images_from_npz.py SiT-L-2-0400000-size-256-vae-ema-cfg-1.0-seed-
 | 20 | 60590               | EuroSAT          | SiT-L/2                   | Pre-trained                  | Yes (Multi-layer)  | SatDINO-B     | Sₐₗₗ → T₁₂     | Frederik   |
 | 21 | 60590               | EuroSAT          | SiT-L/2                   | Pre-trained                  | Yes (Multi-layer)  | SatDINO-B     | Sₐₗₗ → T₉     | Frederik   |
 | 22 | 60590               | EuroSAT          | SiT-L/2                   | Pre-trained                  | Yes (Multi-layer)  | SatDINO-B     | Sₐₗₗ → Tₐₗₗ     | Frederik   |
-| 23 | 60590               | EuroSAT          | SiT-L/2                   | Pre-trained                  | Yes (Multi-layer)  | SatDINO-B     | Sₐₗₗ → Tₐᵥᵍ    | Frederik   |
-| 24 | 60590               | EuroSAT          | SiT-L/2                   | Pre-trained                  | Yes (Multi-layer)  | SatDINO-B     | Sₐᵥᵍ → Tₐᵥᵍ     | Frederik   |
+| 23 | 60590               | EuroSAT          | SiT-L/2                   | Pre-trained                  | Yes (Multi-layer)  | SatDINO-B     | Sₐₗₗ → Tₘₑₐₙ    | Frederik   |
+| 24 | 60590               | EuroSAT          | SiT-L/2                   | Pre-trained                  | Yes (Multi-layer)  | SatDINO-B     | Sₘₑₐₙ → Tₘₑₐₙ     | Frederik   |
 
