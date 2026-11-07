@@ -80,6 +80,9 @@ def main(args):
     print(f"Train: {len(train_paths)} images; test baseline: {len(ref_dists)} images")
     print(f"  test->train NN cosine distance: median {np.median(ref_dists):.4f}, "
           f"p{args.percentile:g} threshold {threshold:.4f}")
+    ref_copies = (ref_dists < args.copy_threshold).sum()
+    print(f"  test images below copy threshold {args.copy_threshold:g}: {ref_copies} "
+          f"({ref_copies / len(ref_dists) * 100:.3f}%)")
 
     for sample_path in args.samples:
         samples = load_images(sample_path)
@@ -87,9 +90,11 @@ def main(args):
             extract_features(encoder, samples, args.batch_size, device), train_feats, device,
         )
         flagged = (dists < threshold).mean() * 100
+        copies = (dists < args.copy_threshold).sum()
         print(f"{sample_path} ({len(samples)} images)")
         print(f"  gen->train NN cosine distance: median {np.median(dists):.4f}, min {dists.min():.4f}")
-        print(f"  below test p{args.percentile:g}: {flagged:.2f}% (about {args.percentile:g}% expected without memorization)")
+        print(f"  below test p{args.percentile:g}: {flagged:.3f}% (about {args.percentile:g}% expected without memorization)")
+        print(f"  below copy threshold {args.copy_threshold:g}: {copies} images ({copies / len(dists) * 100:.3f}%)")
 
         closest = np.argsort(dists)[:args.num_pairs]
         pairs_path = os.path.splitext(sample_path)[0] + "_nn_pairs.png"
@@ -104,6 +109,9 @@ if __name__ == "__main__":
     parser.add_argument("--ref", required=True, help="Held-out real images .npz (e.g. EuroSAT test split).")
     parser.add_argument("--encoder", choices=ENCODERS, default="sscd", help="Frozen feature extractor.")
     parser.add_argument("--percentile", type=float, default=1.0, help="Test-distance percentile used as threshold.")
+    parser.add_argument("--copy-threshold", type=float, default=0.25,
+                        help="Absolute cosine distance below which a sample counts as a copy; "
+                             "0.25 (similarity 0.75) is the SSCD authors' ~90%%-precision copy threshold.")
     parser.add_argument("--num-pairs", type=int, default=16, help="Closest generated/training pairs to save.")
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
