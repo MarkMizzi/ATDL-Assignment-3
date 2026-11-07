@@ -116,6 +116,10 @@ REPA training with a SatDINO model as the target representation can be achieved 
 
 REPA training with SatDINO and a DINOv2 model simultaneously used as the target representation can be achieved using a command similar to the one shown above, but setting `--enc-type=dinov2-vit-l,satdino-vit-b` (or similar).
 
+### Training without REPA
+
+Training without REPA can be achieved using a command similar to the one shown above, but setting `--enc-type="none"`.
+
 ### Fine tuning
 
 To fine tune a pre-trained checkpoint, any of the commands above can be used with the additional flag `--pretrained-path=<path-to-checkpoint>` where `<path-to-checkpoint>` is a path to the pre-trained checkpoint produced using REPA training scripts (checkpoints produced by the original REPA code are compatible).
