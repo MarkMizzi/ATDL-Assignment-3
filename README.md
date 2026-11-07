@@ -162,3 +162,25 @@ python guided-diffusion/evaluations/evaluator.py \
     <samples-dir>/SiT-L-2-0060590-size-256-vae-ema-cfg-1.0-seed-0-sde.npz
 ```
 to collect the metrics for samples in `<samples-dir>`
+
+### Custom Evaluation Suite
+
+Under [./evaluation](./evaluation) is a custom suite of evaluation scripts which we have developed for this project.
+
+One of them measures statistics on nearest neighbour distance between the training set and generated images from a model to ensure that the model is not memorizing samples. The metric used in NN is per-pixel mean square error (MSE). The script can be run using a command like
+```bash
+python nn_test_for_overfitting_fast.py \
+  --train-dir ../../eurosat-splits/train/images \
+  --test-dir ../../eurosat-splits/test/images \
+  --sample-dir ../REPA/samples/eurosat-finetune-lora-adaln-io-sit-l-2-satdino-b/SiT-L-2-0070080-size-256-vae-ema-cfg-1.0-seed-0-sde
+```
+where `--train-dir`, `--test-dir` and `--sample-dir` should point to the directories containing the training, test and generated samples respectively.
+
+Another of the scripts can computer Frechet distance using features from encoders other than Inception (e.g. `satdino` or `ssl4eo-moco`. It can be run using a command like
+```bash
+PYTHONPATH=. python ../evaluation/fd_satdino.py \
+  eurosat_test_ref.npz \
+  samples/eurosat-finetune-lora-adaln-io-sit-l-2-satdino-b/SiT-L-2-0060590-size-256-vae-ema-cfg-1.0-seed-0-sde.npz \
+  --encoder satdino-b
+```
+where `--encoder` is the encoder whose features are used to compute Frechet distance, and can be set to either `satdino-b` or `ssl4eo-moco`.
