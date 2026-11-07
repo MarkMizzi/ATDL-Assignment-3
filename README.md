@@ -83,7 +83,7 @@ The training process is similar to the original REPA source code. You will need 
 ### Using DINOv2 as target representation
 
 REPA training with a DINOv2 model as the target representation can be achieved using a command like
-```
+```bash
 accelerate launch train.py   \
   --report-to="wandb"        \
   --allow-tf32               \
@@ -125,3 +125,40 @@ Training without REPA can be achieved using a command similar to the one shown a
 To fine tune a pre-trained checkpoint, any of the commands above can be used with the additional flag `--pretrained-path=<path-to-checkpoint>` where `<path-to-checkpoint>` is a path to the pre-trained checkpoint produced using REPA training scripts (checkpoints produced by the original REPA code are compatible).
 
 ## Evaluation
+
+During evaluation, 4000 samples generated from trained models are compared to a compressed archive (called `eurosat_test_ref.npz` in the commands below) of 15% of the images from EuroSAT which were set aside prior to training for this purpose. The archive can be obtained [here](https://sharepoint.markmizzi.com/atdl-assignment-3/eurosat_test_ref.npz).
+
+### Generating Samples
+
+Samples can be generated from a trained checkpoint using a command like 
+```bash
+torchrun \
+  --nnodes=1                                                                 \
+  --nproc_per_node=1                                                         \
+  generate.py                                                                \
+  --model SiT-L/2                                                            \
+  --num-fid-samples 4000                                                     \
+  --ckpt exps/eurosat-from-scratch-dinov2-b-sit-l-2/checkpoints/0060590.pt   \
+  --mode sde                                                                 \
+  --cfg-scale=1                                                              \
+  --projector-embed-dims=768                                                 \
+  --num-steps=250                                                            \
+  --num-classes=10                                                           \
+  --sample-dir=exps/eurosat-from-scratch-dinov2-b-sit-l-2/
+```
+
+Note in particular the options `--num-fid-samples`, `--ckpt` and `--sample-dir`, which set the number of samples generated, the checkpoint used for generating the samples, and the output directory respectively. The option `--projector-embed-dims` must also match the output dimensions of the encoder used during training. If REPA was not used during training, you must set `--projector-embed-dims=''`.
+
+ Note also that you will need to set up and activate a Python virtual environment with all the dependencies in [`REPA/requirements.txt`](./REPA/requirements.txt).
+
+### ADM Evaluation Suite
+
+To collect metrics from the ADM evaluation suite for a trained model, you first need to set up and activate a Python virtual environment with all the dependencies in [`guided-diffusion-requirements.txt`](./guided-diffusion-requirements.txt).
+
+You can then run a command like
+```bash
+python guided-diffusion/evaluations/evaluator.py \
+    ./eurosat_test_ref.npz                         \
+    <samples-dir>/SiT-L-2-0060590-size-256-vae-ema-cfg-1.0-seed-0-sde.npz
+```
+to collect the metrics for samples in `<samples-dir>`
