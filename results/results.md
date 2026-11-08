@@ -29,6 +29,11 @@
 | 13 | 70080               | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L (LoRA) | Yes   | SatDINO-b            | 8     | Natasha | 19.2322864290162   | 49.529578426702756 | 3.575568675994873  | 0.71275   | 0.5160493827160494  |
 | 14 | 60590               | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L (LoRA) | Yes   | SatDINO-s            | 8     | Natasha | 18.966548800812802 | 49.4533929082188   | 3.6146390438079834 | 0.7055    | 0.5209876543209877  |
 | 14 | 64240               | EuroSAT | SiT-L/2 | Pre-trained w/ REPA DINOv2-L (LoRA) | Yes   | SatDINO-s            | 8     | Natasha | 19.091244683107504 | 49.494668038064106 | 3.616442918777466  | 0.702     | 0.5202469135802469  |
+|    | **Student Size** |         |         |                                     |       |                      |       |         |                    |                    |                    |           |                     |
+| 15 | 60590               | EuroSAT | SiT-B/2 | From Scratch | Yes   | SatDINO-b            | 8     | Ondrej | 36.42966671303486 | 53.18118098615503  | 4.567107200622559 | 0.32938271604938274    | 0.656  |
+| 16 | 60590               | EuroSAT | SiT-B/2 | From Scratch | Yes   | SatDINO-b            | 8     | Ondrej | 46.069747191517706 | 55.76036312529038  | 4.567107200622559 | 0.22790123456790123    |0.60475  |
+| 17 | 60590               | EuroSAT | SiT-B/2 | From Scratch | Yes   | SatDINO-b            | 8     | Ondrej | 57.003526322834375 | 60.47289502750982  | 4.567107200622559 |0.16518518518518518    | 0.564|
+
 
 ## Nearest-neighbour pixel L2 distance (generated -> train / test)
 
