@@ -202,7 +202,7 @@ Note that `--repa-config` references one of the configurations described in the 
 
 ### Fine tuning
 
-To fine tune a pre-trained checkpoint, any of the commands above can be used with the additional flag `--pretrained-path=<path-to-checkpoint>` where `<path-to-checkpoint>` is a path to the pre-trained checkpoint produced using REPA training scripts (checkpoints produced by the original REPA code are compatible).
+To fine tune a pre-trained checkpoint, any of the commands above can be used with the additional flag `--pretrained-path=<path-to-checkpoint>` where `<path-to-checkpoint>` is a path to the pre-trained checkpoint produced using REPA training scripts (checkpoints produced by the original REPA code are compatible). `--reset-projectors` can additionally be used to reset the weights of the MLP projections learned during pretraining.
 
 ## Evaluation
 
