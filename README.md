@@ -76,6 +76,32 @@ python extract_images_from_npz.py SiT-L-2-0400000-size-256-vae-ema-cfg-1.0-seed-
 | 23 | 60590                       | EuroSAT          | SiT-L/2                   | Pre-trained                  | Yes (Multi-layer) | SatDINO-B                                   | Sₐₗₗ → Tₘₑₐₙ  | Frederik |
 | 24 | 60590                       | EuroSAT          | SiT-L/2                   | Pre-trained                  | Yes (Multi-layer) | SatDINO-B                                   | Sₘₑₐₙ → Tₘₑₐₙ | Frederik |
 
+## Pre-processing
+
+This work uses the EuroSAT dataset which can be downloaded from Kaggle using the following Python script:
+```python
+import kagglehub 
+kagglehub.login()
+path = kagglehub.dataset_download("apollo2506/eurosat-dataset", output_dir="data")
+```
+
+The dataset was preprocessed using the following command:
+```bash
+python REPA/preprocessing/dataset_tools.py convert --source EuroSAT-data/EuroSAT/ --dest images --resolution 256x256 --transform=center-crop-dhariwal
+```
+and Stability variational auto-encoder (VAE) latents can be generated from the preprocessed dataset as follows:
+```bash
+python REPA/preprocessing/dataset_tools.py encode --source=images --dest=vae-sd
+```
+
+Train/test/validation splits of 70%/15%/15% can be generated using the following command:
+```bash
+python preprocessing/split_eurosat.py --source=/work/data --dest=/work/data/eurosat-splits
+```
+where `/work/data` can be replaced by the directory containing the downloaded EuroSAT dataset.
+
+Note that you will need to set up and activate a Python virtual environment with all the dependencies in [`REPA/requirements.txt`](./REPA/requirements.txt) to run any of the commands above successfully.
+
 ## Training
 
 The training process is similar to the original REPA source code. You will need to set up and activate a Python virtual environment with all the dependencies in [`REPA/requirements.txt`](./REPA/requirements.txt).
