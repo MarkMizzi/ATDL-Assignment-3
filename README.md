@@ -146,6 +146,60 @@ REPA training with SatDINO and a DINOv2 model simultaneously used as the target 
 
 Training without REPA can be achieved using a command similar to the one shown above, but setting `--enc-type="none"`.
 
+### Aligning with a hidden layer from the "teacher encoder"
+
+To train using REPA with a hidden layer from the "teacher encoder", use a command like:
+```bash
+accelerate launch train.py   \
+  --report-to="wandb"        \
+  --allow-tf32               \
+  --mixed-precision="fp16"   \
+  --seed=0                   \
+  --path-type="linear"       \
+  --prediction="v"           \
+  --weighting="uniform"      \
+  --model="SiT-L/2"          \
+  --enc-type="satdino-vit-b"  \
+  --proj-coeff=0.5           \
+  --repa-config=S8T9         \
+  --output-dir="exps"        \
+  --num-classes=10 \
+  --resolution=256 \
+  --exp-name=eurosat-finetune-satdino-b-mlS8T9-sit-l-2 \
+  --learning-rate=1e-5 \
+  --data-dir=/work/data/eurosat-splits/train \
+  --val-dir=/work/data/eurosat-splits/val \
+  --checkpointing-steps=730
+```
+
+### Multi-layer REPA
+
+To train using a multi-layer REPA configuration, use a command like:
+```bash
+accelerate launch train.py   \
+  --report-to="wandb"        \
+  --allow-tf32               \
+  --mixed-precision="fp16"   \
+  --seed=0                   \
+  --path-type="linear"       \
+  --prediction="v"           \
+  --weighting="uniform"      \
+  --model="SiT-L/2"          \
+  --enc-type="satdino-vit-b"  \
+  --proj-coeff=0.5           \
+  --repa-config=C            \
+  --output-dir="exps"        \
+  --num-classes=10 \
+  --resolution=256 \
+  --exp-name=eurosat-finetune-satdino-b-mlC-sit-l-2 \
+  --learning-rate=1e-5 \
+  --data-dir=/work/data/eurosat-splits/train \
+  --val-dir=/work/data/eurosat-splits/val \
+  --checkpointing-steps=730
+```
+
+Note that `--repa-config` references one of the configurations described in the assignment report, with these configurations being hard-coded into the training script.
+
 ### Fine tuning
 
 To fine tune a pre-trained checkpoint, any of the commands above can be used with the additional flag `--pretrained-path=<path-to-checkpoint>` where `<path-to-checkpoint>` is a path to the pre-trained checkpoint produced using REPA training scripts (checkpoints produced by the original REPA code are compatible).
