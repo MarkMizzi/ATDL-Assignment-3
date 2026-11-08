@@ -20,7 +20,9 @@ from accelerate.utils import ProjectConfiguration, set_seed
 
 from models.sit import SiT_models
 from loss import SILoss
-from utils import load_encoders
+from utils import (load_encoders, teacher_depth, num_teacher_blocks, forward_teacher_layers,
+                   check_teacher_layers)
+from repa_configs import get_repa_config, build_teacher_targets, log_terms
 
 from dataset import CustomDataset
 from diffusers.models import AutoencoderKL
@@ -179,7 +181,7 @@ def apply_lora(model, rank, targets, train_io=False):
     )
     model = get_peft_model(model, config)
     # New class embeddings and alignment projectors must stay fully trainable.
-    trainable = ['.y_embedder.', '.projectors.']
+    trainable = ['.y_embedder.', '.projectors.', '.repa_projectors.']
     if train_io:
         trainable += ['.x_embedder.', '.final_layer.']
     for name, param in model.named_parameters():
@@ -206,6 +208,74 @@ def merged_lora_state_dict(peft_model):
                 delta = module.get_delta_weight(adapter).detach().cpu()
                 state[weight_key] += delta.to(state[weight_key].dtype)
     return state
+
+
+def load_pretrained_weights(model, args, logger):
+    """Load a fine-tuning checkpoint: backbone strictly, fresh class embeddings,
+    and alignment projectors kept or reset as described in the README."""
+    checkpoint = torch.load(
+        args.pretrained_path,
+        map_location='cpu',
+        weights_only=False,
+    )
+    if 'ema' in checkpoint:
+        state_dict = checkpoint['ema']
+    elif 'model' in checkpoint:
+        state_dict = checkpoint['model']
+    else:
+        state_dict = checkpoint
+    state_dict = dict(state_dict)
+    label_key = 'y_embedder.embedding_table.weight'
+    state_dict[label_key] = model.state_dict()[label_key].detach().clone()
+    if args.reset_projectors or args.enc_type == 'none':
+        # Multi-layer REPA heads (--repa-config) are always freshly initialized too.
+        projector_prefixes = ('projectors.', 'repa_projectors.')
+        state_dict = {
+            key: value for key, value in state_dict.items()
+            if not key.startswith(projector_prefixes)
+        }
+        state_dict.update({
+            key: value for key, value in model.state_dict().items()
+            if key.startswith(projector_prefixes)
+        })
+        if args.enc_type == 'none':
+            logger.info("Pretrained alignment projectors discarded; alignment disabled.")
+        else:
+            logger.info("Alignment projectors initialized afresh.")
+    else:
+        saved_args = checkpoint.get('args')
+        saved_enc_type = (
+            saved_args.get('enc_type') if isinstance(saved_args, dict)
+            else getattr(saved_args, 'enc_type', None)
+        )
+        saved_enc_names = saved_enc_type.split(',') if saved_enc_type else None
+        if saved_enc_names is None:
+            logger.warning(
+                "Checkpoint has no encoder metadata; existing projectors are "
+                "matched by index. Keep their original encoder order and variants."
+            )
+        current_state = model.state_dict()
+        for index, enc_name in enumerate(args.enc_type.split(',')):
+            prefix = f'projectors.{index}.'
+            if saved_enc_names is not None and index < len(saved_enc_names):
+                if saved_enc_names[index] != enc_name:
+                    raise ValueError(
+                        f"Projector {index} was trained for {saved_enc_names[index]}, "
+                        f"not {enc_name}. Keep the pretrained encoder order or "
+                        "use --reset-projectors."
+                    )
+            elif not any(key.startswith(prefix) for key in state_dict):
+                state_dict.update({
+                    key: value.detach().clone()
+                    for key, value in current_state.items()
+                    if key.startswith(prefix)
+                })
+                logger.info(f"New alignment projector initialized for {enc_name}.")
+    model.load_state_dict(state_dict, strict=True)
+    logger.info(
+        f"Loaded pretrained weights from {args.pretrained_path}; "
+        "class embeddings initialized afresh."
+    )
 
 
 #################################################################################
@@ -256,6 +326,17 @@ def main(args):
     else:
         encoders, encoder_types, architectures = [], [], []
     z_dims = [encoder.embed_dim for encoder in encoders]
+    repa_config = None
+    if args.repa_config:
+        repa_config = get_repa_config(args.repa_config, teacher_depth(args.enc_type))
+        blocks = num_teacher_blocks(encoders[0], encoder_types[0])
+        if blocks != repa_config.teacher_depth:
+            raise ValueError(f"{args.enc_type} has {blocks} blocks, expected {repa_config.teacher_depth}")
+    repa_kwargs = {}
+    if repa_config is not None:
+        # The model replaces the legacy single projector by the configuration's connections
+        # (z_dims is kept so model construction draws the same random numbers as before).
+        repa_kwargs = dict(repa_config=repa_config, repa_z_dim=z_dims[0], repa_seed=args.seed)
     block_kwargs = {"fused_attn": args.fused_attn, "qk_norm": args.qk_norm}
     model = SiT_models[args.model](
         input_size=latent_size,
@@ -263,71 +344,18 @@ def main(args):
         use_cfg = (args.cfg_prob > 0),
         z_dims = z_dims,
         encoder_depth=args.encoder_depth,
+        **repa_kwargs,
         **block_kwargs
     )
+    if repa_config is not None and accelerator.is_main_process:
+        logger.info(f"Multi-layer REPA: {json.dumps(repa_config.summary())}")
+        logger.info(
+            f"REPA projector parameters: "
+            f"{sum(p.numel() for p in model.repa_projectors.parameters()):,}"
+        )
 
     if args.pretrained_path:
-        checkpoint = torch.load(
-            args.pretrained_path,
-            map_location='cpu',
-            weights_only=False,
-        )
-        if 'ema' in checkpoint:
-            state_dict = checkpoint['ema']
-        elif 'model' in checkpoint:
-            state_dict = checkpoint['model']
-        else:
-            state_dict = checkpoint
-        state_dict = dict(state_dict)
-        label_key = 'y_embedder.embedding_table.weight'
-        state_dict[label_key] = model.state_dict()[label_key].detach().clone()
-        if args.reset_projectors or args.enc_type == 'none':
-            state_dict = {
-                key: value for key, value in state_dict.items()
-                if not key.startswith('projectors.')
-            }
-            state_dict.update({
-                key: value for key, value in model.state_dict().items()
-                if key.startswith('projectors.')
-            })
-            if args.enc_type == 'none':
-                logger.info("Pretrained alignment projectors discarded; alignment disabled.")
-            else:
-                logger.info("Alignment projectors initialized afresh.")
-        else:
-            saved_args = checkpoint.get('args')
-            saved_enc_type = (
-                saved_args.get('enc_type') if isinstance(saved_args, dict)
-                else getattr(saved_args, 'enc_type', None)
-            )
-            saved_enc_names = saved_enc_type.split(',') if saved_enc_type else None
-            if saved_enc_names is None:
-                logger.warning(
-                    "Checkpoint has no encoder metadata; existing projectors are "
-                    "matched by index. Keep their original encoder order and variants."
-                )
-            current_state = model.state_dict()
-            for index, enc_name in enumerate(args.enc_type.split(',')):
-                prefix = f'projectors.{index}.'
-                if saved_enc_names is not None and index < len(saved_enc_names):
-                    if saved_enc_names[index] != enc_name:
-                        raise ValueError(
-                            f"Projector {index} was trained for {saved_enc_names[index]}, "
-                            f"not {enc_name}. Keep the pretrained encoder order or "
-                            "use --reset-projectors."
-                        )
-                elif not any(key.startswith(prefix) for key in state_dict):
-                    state_dict.update({
-                        key: value.detach().clone()
-                        for key, value in current_state.items()
-                        if key.startswith(prefix)
-                    })
-                    logger.info(f"New alignment projector initialized for {enc_name}.")
-        model.load_state_dict(state_dict, strict=True)
-        logger.info(
-            f"Loaded pretrained weights from {args.pretrained_path}; "
-            "class embeddings initialized afresh."
-        )
+        load_pretrained_weights(model, args, logger)
 
     if args.lora_rank > 0:
         model = apply_lora(model, args.lora_rank, args.lora_targets, args.lora_train_io)
@@ -359,7 +387,8 @@ def main(args):
         accelerator=accelerator,
         latents_scale=latents_scale,
         latents_bias=latents_bias,
-        weighting=args.weighting
+        weighting=args.weighting,
+        repa_config=repa_config,
     )
     if accelerator.is_main_process:
         logger.info(f"SiT Parameters: {sum(p.numel() for p in model.parameters()):,}")
@@ -486,6 +515,18 @@ def main(args):
     n = ys.size(0)
     xT = torch.randn((n, 4, latent_size, latent_size), device=device)
 
+    teacher_checked = []
+
+    def repa_teacher_targets(raw_image):
+        # One frozen teacher pass yields every requested teacher layer.
+        raw_image_ = preprocess_raw_image(raw_image, encoder_types[0])
+        if not teacher_checked:  # once: the final layer must equal the single-layer target
+            check_teacher_layers(encoders[0], encoder_types[0], raw_image_)
+            teacher_checked.append(True)
+        features = forward_teacher_layers(encoders[0], encoder_types[0], raw_image_,
+                                          repa_config.teacher_layers)
+        return build_teacher_targets(repa_config, features)
+
     def evaluate_losses(dataloader, split):
         cpu_rng_state = torch.get_rng_state()
         cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
@@ -496,6 +537,7 @@ def main(args):
 
         denoising_loss_sum = 0.0
         alignment_loss_sum = 0.0
+        term_sums = {}
         num_examples = 0
         try:
             ema.eval()
@@ -509,7 +551,9 @@ def main(args):
                     )
                     zs = []
                     with accelerator.autocast():
-                        for encoder, encoder_type in zip(encoders, encoder_types):
+                        if repa_config is not None:
+                            zs = repa_teacher_targets(raw_image)
+                        for encoder, encoder_type in zip(encoders if repa_config is None else [], encoder_types):
                             raw_image_ = preprocess_raw_image(raw_image, encoder_type)
                             features = encoder.forward_features(raw_image_)
                             if 'mocov3' in encoder_type:
@@ -524,6 +568,10 @@ def main(args):
                     batch_size = images.shape[0]
                     denoising_loss_sum += denoising_loss.sum().item()
                     alignment_loss_sum += alignment_loss.sum().item()
+                    if repa_config is not None:
+                        terms = log_terms(repa_config, loss_fn.connection_losses)
+                        for name, value in zip(terms, torch.stack(list(terms.values())).tolist()):
+                            term_sums[name] = term_sums.get(name, 0.0) + value * batch_size
                     num_examples += batch_size
         finally:
             torch.set_rng_state(cpu_rng_state)
@@ -533,6 +581,7 @@ def main(args):
         return {
             f'{split}/diffusion_loss': denoising_loss_sum / num_examples,
             f'{split}/alignment_loss': alignment_loss_sum / num_examples,
+            **{f'{split}/repa/{name}': value / num_examples for name, value in term_sums.items()},
         }
 
     loss_curve_epochs = []
@@ -548,6 +597,7 @@ def main(args):
         epoch_diffusion_loss_sum = 0.0
         epoch_alignment_loss_sum = 0.0
         epoch_total_loss_sum = 0.0
+        epoch_term_sums = {}
         epoch_example_count = 0
         epoch_grad_norm_sum = 0.0
         epoch_optimizer_steps = 0
@@ -569,7 +619,9 @@ def main(args):
                 x = sample_posterior(x, latents_scale=latents_scale, latents_bias=latents_bias)
                 zs = []
                 with accelerator.autocast():
-                    for encoder, encoder_type, arch in zip(encoders, encoder_types, architectures):
+                    if repa_config is not None:
+                        zs = repa_teacher_targets(raw_image)
+                    for encoder, encoder_type, arch in zip(encoders if repa_config is None else [], encoder_types, architectures):
                         raw_image_ = preprocess_raw_image(raw_image, encoder_type)
                         z = encoder.forward_features(raw_image_)
                         if 'mocov3' in encoder_type: z = z = z[:, 1:] 
@@ -586,6 +638,10 @@ def main(args):
                 epoch_diffusion_loss_sum += loss_mean.detach().item() * batch_size
                 epoch_alignment_loss_sum += proj_loss_mean.detach().item() * batch_size
                 epoch_total_loss_sum += loss.detach().item() * batch_size
+                if repa_config is not None:
+                    terms = log_terms(repa_config, loss_fn.connection_losses)
+                    for name, value in zip(terms, torch.stack(list(terms.values())).tolist()):
+                        epoch_term_sums[name] = epoch_term_sums.get(name, 0.0) + value * batch_size
                 epoch_example_count += batch_size
                     
                 ## optimization
@@ -605,7 +661,9 @@ def main(args):
             if accelerator.sync_gradients:
                 progress_bar.update(1)
                 global_step += 1
-            if global_step % args.checkpointing_steps == 0 and global_step > 0:
+            # sync_gradients: save once per optimizer step, not once per accumulated micro-batch.
+            if (accelerator.sync_gradients and global_step % args.checkpointing_steps == 0
+                    and global_step > 0):
                 if accelerator.is_main_process:
                     checkpoint = {
                         "model": model.state_dict(),
@@ -624,8 +682,23 @@ def main(args):
                             "lora_ema": ema.state_dict(),
                         })
                     checkpoint_path = f"{checkpoint_dir}/{global_step:07d}.pt"
-                    torch.save(checkpoint, checkpoint_path)
+                    # Write to a temporary name and rename once complete, so a failed save
+                    # (e.g. a full disk) never leaves a truncated checkpoint to resume from.
+                    tmp_path = f"{checkpoint_path}.tmp"
+                    try:
+                        torch.save(checkpoint, tmp_path)
+                        os.replace(tmp_path, checkpoint_path)
+                    except BaseException:
+                        if os.path.exists(tmp_path):
+                            os.remove(tmp_path)
+                        raise
                     logger.info(f"Saved checkpoint to {checkpoint_path}")
+                    if args.keep_last_checkpoints > 0:
+                        # Delete older checkpoints only after the new one is fully written.
+                        saved = sorted(Path(checkpoint_dir).glob('[0-9]' * 7 + '.pt'))
+                        for old in saved[:-args.keep_last_checkpoints]:
+                            old.unlink()
+                            logger.info(f"Removed old checkpoint {old}")
 
             if (batch_index + 1 == len(train_dataloader)
                     and (epoch + 1) % 10 == 0):
@@ -697,6 +770,16 @@ def main(args):
         }
         if optimizer_step_count > 0:
             epoch_logs["train/grad_norm"] = grad_norm_sum / optimizer_step_count
+        if repa_config is not None and epoch_term_sums:
+            epoch_logs["train/weighted_alignment_loss"] = (
+                args.proj_coeff * epoch_logs["train/alignment_loss"]
+            )
+            term_names = sorted(epoch_term_sums)
+            term_values = accelerator.gather(torch.tensor(
+                [epoch_term_sums[name] for name in term_names], dtype=torch.float64, device=device,
+            )).view(-1, len(term_names)).sum(dim=0).tolist()
+            for name, value in zip(term_names, term_values):
+                epoch_logs[f"train/repa/{name}"] = value / example_count
         accelerator.log(epoch_logs, step=global_step)
         logger.info(
             f"Training after epoch {epoch + 1} at step {global_step}: "
@@ -782,7 +865,8 @@ def parse_args(input_args=None):
     # model
     parser.add_argument("--model", type=str)
     parser.add_argument("--num-classes", type=int, default=1000)
-    parser.add_argument("--encoder-depth", type=int, default=8)
+    parser.add_argument("--encoder-depth", type=int, default=None,
+                        help="SiT block aligned by single-layer REPA (default 8); not used with --repa-config.")
     parser.add_argument("--fused-attn", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--qk-norm",  action=argparse.BooleanOptionalAction, default=False)
 
@@ -806,6 +890,8 @@ def parse_args(input_args=None):
     parser.add_argument("--max-train-steps", type=int, default=400000)
     parser.add_argument("--checkpointing-steps", type=int, default=50000)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=1)
+    parser.add_argument("--keep-last-checkpoints", type=int, default=0,
+                        help="Keep only the newest N checkpoints; 0 keeps all.")
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--adam-beta1", type=float, default=0.9, help="The beta1 parameter for the Adam optimizer.")
     parser.add_argument("--adam-beta2", type=float, default=0.999, help="The beta2 parameter for the Adam optimizer.")
@@ -828,6 +914,10 @@ def parse_args(input_args=None):
     parser.add_argument("--proj-coeff", type=float, default=0.5)
     parser.add_argument("--weighting", default="uniform", type=str, help="Max gradient norm.")
     parser.add_argument("--legacy", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--repa-config", type=str, default=None,
+                        help="Multi-layer REPA: a preset A-E or a single pair S<j>T<i> (student "
+                             "block j -> teacher block i, e.g. S8T9); see JOURNAL.md. "
+                             "Omit for the original single-layer REPA at --encoder-depth.")
 
     if input_args is not None:
         args = parser.parse_args(input_args)
@@ -863,6 +953,23 @@ def parse_args(input_args=None):
         parser.error("--lora-rank requires --pretrained-path or --resume-step")
     if args.lora_train_io and args.lora_rank == 0:
         parser.error("--lora-train-io requires --lora-rank")
+    encoder_depth_given = args.encoder_depth is not None
+    if not encoder_depth_given:
+        args.encoder_depth = 8
+    if args.repa_config is not None:
+        if args.enc_type == 'none' or ',' in args.enc_type:
+            parser.error("--repa-config needs exactly one teacher in --enc-type")
+        try:
+            repa = get_repa_config(args.repa_config, teacher_depth(args.enc_type))
+        except ValueError as error:
+            parser.error(str(error))
+        if args.pretrained_path and not args.reset_projectors:
+            parser.error("--repa-config with --pretrained-path requires --reset-projectors "
+                         "(projectors start fresh)")
+        if encoder_depth_given:
+            parser.error("--encoder-depth cannot be combined with --repa-config; the config sets the "
+                         "student layer(s), e.g. S10T6 uses student block 10")
+        args.repa_summary = repa.summary()
 
     return args
 

@@ -24,6 +24,7 @@ class SILoss:
             accelerator=None, 
             latents_scale=None, 
             latents_bias=None,
+            repa_config=None,
             ):
         self.prediction = prediction
         self.weighting = weighting
@@ -32,6 +33,9 @@ class SILoss:
         self.accelerator = accelerator
         self.latents_scale = latents_scale
         self.latents_bias = latents_bias
+        self.repa_config = repa_config
+        # Per-example loss of each multi-layer REPA connection from the latest call.
+        self.connection_losses = {}
 
     def interpolant(self, t):
         if self.path_type == "linear":
@@ -79,6 +83,12 @@ class SILoss:
 
         if not zs:
             return denoising_loss, torch.zeros_like(denoising_loss)
+
+        if self.repa_config is not None:
+            # zs: teacher targets by name; zs_tilde: projections by connection name.
+            from repa_configs import connection_losses, reduce_losses
+            self.connection_losses = connection_losses(self.repa_config, zs_tilde, zs)
+            return denoising_loss, reduce_losses(self.repa_config, self.connection_losses)
 
         # Return one patch-averaged alignment loss per example.
         proj_loss = None

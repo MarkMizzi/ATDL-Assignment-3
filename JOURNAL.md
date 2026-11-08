@@ -203,6 +203,62 @@ torchrun \
   --sample-dir=exps/eurosat-from-scratch-norepa-sit-l-2/
 ```
 
+- 07/11 Frederik. Added multi-layer REPA (`--repa-config`, defined in `REPA/repa_configs.py`). Without `--repa-config` nothing changes: the commands above still align one student block (`--encoder-depth`) with the teacher's final layer. With `--repa-config`, the student/teacher layers come from the config, so `--encoder-depth` must be left out. Presets `A`-`E` are the configurations in the report (A: all students -> T12, B: all students -> T9, C: all-to-all, D: all students -> T_mean, E: S_mean -> T_mean); `S<j>T<i>` aligns a single student block j with a single teacher block i (e.g. `S8T9`; `S8T12` equals the original depth-8 run). The presets are defined for a 12-block teacher such as SatDINO-B; a single pair works with any ViT teacher (`satdino`, `dinov2`, `mocov3`, `clip`, `mae`, `jepa`), e.g. `S8T18` with `--enc-type=dinov2-vit-l`. `--reset-projectors` is needed because the heads start fresh.
+
+  finetune with a non-final teacher layer (student block 8 -> SatDINO block 9):
+
+  ```bash
+  accelerate launch train.py   \
+    --report-to="wandb"        \
+    --allow-tf32               \
+    --mixed-precision="fp16"   \
+    --seed=0                   \
+    --path-type="linear"       \
+    --prediction="v"           \
+    --weighting="uniform"      \
+    --model="SiT-L/2"          \
+    --enc-type="satdino-vit-b"  \
+    --proj-coeff=0.5           \
+    --repa-config=S8T9         \
+    --output-dir="exps"        \
+    --num-classes=10 \
+    --resolution=256 \
+    --exp-name=eurosat-finetune-satdino-b-mlS8T9-sit-l-2 \
+    --pretrained-path=./0400000.pt \
+    --learning-rate=1e-5 \
+    --reset-projectors \
+    --data-dir=/work/data/eurosat-splits/train \
+    --val-dir=/work/data/eurosat-splits/val \
+    --checkpointing-steps=730
+  ```
+
+  finetune with a multi-layer configuration (C: all 6 student blocks aligned with all 4 teacher blocks, 24 projectors):
+
+  ```bash
+  accelerate launch train.py   \
+    --report-to="wandb"        \
+    --allow-tf32               \
+    --mixed-precision="fp16"   \
+    --seed=0                   \
+    --path-type="linear"       \
+    --prediction="v"           \
+    --weighting="uniform"      \
+    --model="SiT-L/2"          \
+    --enc-type="satdino-vit-b"  \
+    --proj-coeff=0.5           \
+    --repa-config=C            \
+    --output-dir="exps"        \
+    --num-classes=10 \
+    --resolution=256 \
+    --exp-name=eurosat-finetune-satdino-b-mlC-sit-l-2 \
+    --pretrained-path=./0400000.pt \
+    --learning-rate=1e-5 \
+    --reset-projectors \
+    --data-dir=/work/data/eurosat-splits/train \
+    --val-dir=/work/data/eurosat-splits/val \
+    --checkpointing-steps=730
+  ```
+
 ## Evaluation
 
 - 04/11 Natasha. Made a faster version of nn_test_for_overfitting that is computing per-pixel differences. It also compares generated pictures both to train and test ones. It can be called as e.g.:

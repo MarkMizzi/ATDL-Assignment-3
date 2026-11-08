@@ -178,6 +178,9 @@ class SiT(nn.Module):
         use_cfg=False,
         z_dims=[768],
         projector_dim=2048,
+        repa_config=None,
+        repa_z_dim=None,
+        repa_seed=0,
         **block_kwargs # fused_attn
     ):
         super().__init__()
@@ -208,6 +211,29 @@ class SiT(nn.Module):
             ])
         self.final_layer = FinalLayer(decoder_hidden_size, patch_size, self.out_channels)
         self.initialize_weights()
+
+        # Multi-layer REPA heads (repa_configs.py), keyed by connection name. Built after
+        # initialize_weights and outside the global RNG, so the backbone/class-embedding init
+        # and the training RNG stream are identical for every configuration. Passing the
+        # legacy z_dims as well makes construction draw exactly what a single-layer REPA run
+        # with the same seed draws; that legacy head then initializes the identical
+        # S<encoder_depth> -> final-teacher connection and is dropped.
+        self.repa_config = repa_config
+        self.repa_projectors = nn.ModuleDict()
+        if repa_config is not None:
+            from repa_configs import init_projector
+            assert max(repa_config.student_layers) <= depth, "REPA student layer exceeds model depth"
+            legacy = self.projectors[0] if len(z_dims) == 1 and z_dims[0] == repa_z_dim else None
+            with torch.random.fork_rng(devices=[]):
+                for connection in repa_config.connections:
+                    mlp = build_mlp(hidden_size, projector_dim, repa_z_dim)
+                    if legacy is not None and (connection.student, connection.teacher) == (
+                            encoder_depth, repa_config.final_teacher_layer):
+                        mlp.load_state_dict(legacy.state_dict())
+                    else:
+                        init_projector(mlp, connection.name, repa_seed)
+                    self.repa_projectors[connection.name] = mlp
+            self.projectors = nn.ModuleList()
 
     def initialize_weights(self):
         # Initialize transformer layers:
@@ -277,10 +303,17 @@ class SiT(nn.Module):
         y = self.y_embedder(y, self.training)    # (N, D)
         c = t_embed + y                                # (N, D)
 
+        repa_layers = self.repa_config.student_layers if self.repa_config is not None else ()
+        hidden_states = {}
         for i, block in enumerate(self.blocks):
             x = block(x, c)                      # (N, T, D)
             if (i + 1) == self.encoder_depth:
                 zs = [projector(x.reshape(-1, D)).reshape(N, T, -1) for projector in self.projectors]
+            if (i + 1) in repa_layers:
+                hidden_states[i + 1] = x         # 1-indexed: output of blocks[i]
+        if self.repa_config is not None:
+            from repa_configs import project_students
+            zs = project_students(self.repa_config, hidden_states, self.repa_projectors)
         x = self.final_layer(x, c)                # (N, T, patch_size ** 2 * out_channels)
         x = self.unpatchify(x)                   # (N, out_channels, H, W)
 

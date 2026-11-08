@@ -83,6 +83,10 @@ def main(args):
         state_dict = load_legacy_checkpoints(
             state_dict=state_dict, encoder_depth=args.encoder_depth
             )
+    # Multi-layer REPA heads (--repa-config) are training-only and unused for sampling.
+    state_dict = {k: v for k, v in state_dict.items() if not k.startswith('repa_projectors.')}
+    if not any(k.startswith('projectors.') for k in state_dict):
+        model.projectors = torch.nn.ModuleList()  # --repa-config or --enc-type=none checkpoint
     model.load_state_dict(state_dict)
     model.eval()  # important!
     vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device)

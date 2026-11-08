@@ -75,6 +75,120 @@ class SatDINOEncoder(torch.nn.Module):
     def forward_features(self, images):
         return self.model(images, return_all=True)[:, 1:-1]
 
+    def forward_layers(self, images, layers):
+        """Patch tokens after the given 1-indexed blocks from one forward pass.
+
+        Each layer goes through the frozen final norm, as in SatDINO's own
+        forward_intermediate_layers, so the last block equals forward_features.
+        Class and trailing GSD register tokens are excluded.
+        """
+        blocks = self.model.blocks
+        layers = sorted(set(layers))
+        if not layers or layers[0] < 1 or layers[-1] > len(blocks):
+            raise ValueError(f"SatDINO layers must be in 1..{len(blocks)}, got {layers}")
+        x = self.model.prepare_tokens(images)
+        features = {}
+        for index, block in enumerate(blocks, start=1):
+            x = block(x)
+            if index in layers:
+                features[index] = self.model.norm(x)[:, 1:-1]
+            if index == layers[-1]:
+                break
+        return features
+
+
+# Teachers supported by --repa-config, and their block counts by model size
+# (MAE is always ViT-L and I-JEPA always ViT-H in load_encoders).
+REPA_TEACHER_DEPTHS = {
+    'satdino': {'s': 12, 'b': 12},
+    'dinov2': {'s': 12, 'b': 12, 'l': 24, 'g': 40},
+    'mocov3': {'s': 12, 'b': 12, 'l': 24},
+    'clip': {'b': 12, 'l': 24},
+    'mae': {'l': 24},
+    'jepa': {'h': 32},
+}
+
+
+def teacher_depth(enc_name):
+    """Number of transformer blocks of a --enc-type teacher, without loading it."""
+    encoder_type, architecture, model_config = enc_name.split('-')
+    family = 'dinov2' if 'dinov2' in encoder_type else encoder_type
+    if family == 'mae':
+        model_config = 'l'
+    elif family == 'jepa':
+        model_config = 'h'
+    depths = REPA_TEACHER_DEPTHS.get(family, {})
+    if architecture != 'vit' or model_config.lower() not in depths:
+        raise ValueError(f"--repa-config does not support --enc-type={enc_name}; supported: "
+                         + ', '.join(f'{f}-vit-{c}' for f, cs in REPA_TEACHER_DEPTHS.items() for c in cs))
+    return depths[model_config.lower()]
+
+
+def baseline_teacher_target(encoder, encoder_type, images):
+    """The single-layer REPA target, exactly as train.py builds it from forward_features."""
+    z = encoder.forward_features(images)
+    if 'mocov3' in encoder_type: z = z[:, 1:]
+    if 'dinov2' in encoder_type: z = z['x_norm_patchtokens']
+    return z
+
+
+def _teacher_blocks(encoder, encoder_type):
+    """(blocks, to_target): the teacher's transformer blocks, and the map from a block's
+    output to the baseline target layout (final norm and token selection as in
+    baseline_teacher_target), so the last block gives exactly the baseline target."""
+    if encoder_type == 'satdino':
+        model = encoder.model
+        return model.blocks, lambda x: model.norm(x)[:, 1:-1]  # drop class and GSD tokens
+    if 'dinov2' in encoder_type:
+        blocks = encoder.blocks
+        if getattr(encoder, 'chunked_blocks', False):
+            blocks = [b for chunk in blocks for b in chunk if not isinstance(b, torch.nn.Identity)]
+        skip = 1 + encoder.num_register_tokens  # class and register tokens
+        return blocks, lambda x: encoder.norm(x)[:, skip:]
+    if encoder_type == 'mocov3':
+        return encoder.blocks, lambda x: encoder.norm(x)[:, 1:]
+    if encoder_type == 'mae':  # its forward_features skips the final norm
+        return encoder.blocks, lambda x: x[:, 1:]
+    if encoder_type == 'jepa':  # no class token
+        return encoder.blocks, lambda x: x if encoder.norm is None else encoder.norm(x)
+    if encoder_type == 'clip':  # sequence-first blocks, no final norm
+        return encoder.model.transformer.resblocks, lambda x: x.permute(1, 0, 2)[:, 1:]
+    raise NotImplementedError(f"--repa-config does not support {encoder_type} teachers")
+
+
+def num_teacher_blocks(encoder, encoder_type):
+    return len(_teacher_blocks(encoder, encoder_type)[0])
+
+
+def forward_teacher_layers(encoder, encoder_type, images, layers):
+    """{1-indexed teacher layer: [B, N, D]} from one forward pass; each layer is
+    post-processed like the baseline target (see _teacher_blocks)."""
+    blocks, to_target = _teacher_blocks(encoder, encoder_type)
+    layers = sorted(set(layers))
+    if not layers or layers[0] < 1 or layers[-1] > len(blocks):
+        raise ValueError(f"Teacher layers must be in 1..{len(blocks)}, got {layers}")
+    if hasattr(encoder, 'forward_layers'):  # SatDINO: stops after the last requested block
+        return encoder.forward_layers(images, layers)
+    captured = {}
+    hooks = [blocks[i - 1].register_forward_hook(
+        lambda module, inputs, output, i=i: captured.__setitem__(i, output)) for i in layers]
+    try:
+        encoder.forward_features(images)
+    finally:
+        for hook in hooks:
+            hook.remove()
+    return {i: to_target(captured[i]) for i in layers}
+
+
+def check_teacher_layers(encoder, encoder_type, images):
+    """Raise unless the final teacher layer equals the baseline REPA target."""
+    final = num_teacher_blocks(encoder, encoder_type)
+    layer = forward_teacher_layers(encoder, encoder_type, images, [final])[final]
+    target = baseline_teacher_target(encoder, encoder_type, images)
+    if layer.shape != target.shape or not torch.allclose(layer.float(), target.float(), atol=1e-4, rtol=1e-3):
+        raise RuntimeError(f"{encoder_type}: final teacher layer {tuple(layer.shape)} does not match the "
+                           f"baseline REPA target {tuple(target.shape)}")
+
 
 @torch.no_grad()
 def load_encoders(enc_type, device, resolution=256):
